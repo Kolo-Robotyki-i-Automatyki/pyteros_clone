@@ -20,7 +20,7 @@ from operator import itemgetter, attrgetter
 from itertools import count
 import json
 
-from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,handler
+from ..zeromq_device import DeviceWorker,DeviceOverZeroMQ,handler
 
 # structs according to
 # http://msdn.microsoft.com/en-gb/library/windows/desktop/ee417001%28v=vs.85%29.aspx
@@ -108,33 +108,28 @@ ERROR_DEVICE_NOT_CONNECTED = 1167
 ERROR_SUCCESS = 0
 
 
+default_req_port = 7003
+default_pub_port = 7004
+
+
 class XBoxWorker(DeviceWorker):
 
-    """
-    XInputJoystick
-    Example:
-    controller_one = XInputJoystick(0)
-    """
-    def __init__(self, *args, **kwargs):
-        #values = vars()
-        #del values['self']
-        #self.__dict__.update(values)
-        
+    def __init__(self, req_port=default_req_port, pub_port=default_pub_port, **kwargs):
         self.device_number = 0
-        super().__init__(*args, **kwargs)
-        self.refresh_rate = 0.01
+        super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
 
         self._last_state = self.get_state()
         self.received_packets = 0
         self.missed_packets = 0
-        
-        battery = self.get_battery_information()
-        print(battery)
 
         # Set the method that will be called to normalize
         #  the values for analog axis.
         choices = [self.translate_identity, self.translate_using_data_size]
         self.translate = choices[True]
+        
+    def init_device(self):
+        battery = self.get_battery_information()
+        print(battery)
 
     def translate_using_data_size(self, value, data_size):
         # normalizes analog data to [0,1] for unsigned data
@@ -211,9 +206,13 @@ class XBoxWorker(DeviceWorker):
         d = super().status()
         
         state = self.get_state()
+        
         if not state:
-            raise RuntimeError(
-                "Joystick %d is not connected" % self.device_number)
+            d['connected'] = False
+            return d
+            #raise RuntimeError(
+            #    "Joystick %d is not connected" % self.device_number)
+        d['connected'] = True
         if state.packet_number != self._last_state.packet_number:
             self.update_packet_count(state)
         
@@ -247,6 +246,9 @@ class XBoxWorker(DeviceWorker):
         self._last_state = state
         return d
     
+    @handler("XBox", "currentStatus")
+    def currentStatus(self):
+        return self.status()
 
 
 def sample_first_joystick():
@@ -288,10 +290,9 @@ def sample_first_joystick():
 
 
 
-class XBoxPad(DeviceOverZeroMQ):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+class XBoxPad(DeviceOverZeroMQ):    
+    def __init__(self, req_port=default_req_port, pub_port=default_pub_port, **kwargs):
+        super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
         self.createDelegatedMethods("XBox")
 
     
@@ -302,7 +303,11 @@ class XBoxPad(DeviceOverZeroMQ):
         widget = QtWidgets.QWidget(parentWidget)
         layout = QtWidgets.QHBoxLayout(parentWidget)
         widget.setLayout(layout)
-        
+        self.checkbox = QtWidgets.QCheckBox('Connected')
+        self.checkbox.setDisabled(True)
+        self.checkbox.setTristate(True)
+        self.checkbox.setCheckState(QtCore.Qt.PartiallyChecked)
+        layout.addWidget(self.checkbox)
         self.textedit = QtWidgets.QTextEdit()
         layout.addWidget(self.textedit)
         
@@ -313,6 +318,9 @@ class XBoxPad(DeviceOverZeroMQ):
             menu.addAction(dock.toggleViewAction())
         
         def updateSlot(status):
+            if 'connected' in status:
+                v = QtCore.Qt.Checked if status['connected'] else QtCore.Qt.Unchecked
+                self.checkbox.setCheckState(v)
             self.textedit.setText(str(status))
         
         self.createListenerThread(updateSlot)

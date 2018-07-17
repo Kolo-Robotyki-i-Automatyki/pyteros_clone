@@ -49,14 +49,13 @@ class MainWindow(QtWidgets.QMainWindow):
         ipython_widget = widget
         ipython_widget.show()
         self.kernel_client = kernel_client
-        
+        #kernel_client.execute("import devices.demo.demo")
         return widget
     
-    def createProcessControlTab(self):
-        """ Creates and returns the widget to control slave processes """
-        scrollArea = QtWidgets.QScrollArea()
-        self.
-        scrollArea.setWidget(widget)
+    #def createProcessControlTab(self):
+        #""" Creates and returns the widget to control slave processes """
+        #scrollArea = QtWidgets.QScrollArea()
+        #scrollArea.setWidget(widget)
         
     
     
@@ -67,7 +66,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tabWidget = QtWidgets.QTabWidget()
         self.setCentralWidget(self.tabWidget)
         self.tabWidget.addTab(self.createConsoleTab(), "Console")
-        self.tabWidget.addTab(self.createProcessControlTab, "Devices")
+        #self.tabWidget.addTab(self.createProcessControlTab, "Devices")
         
 
     def setupIcons(self):
@@ -87,41 +86,48 @@ if __name__ == '__main__':
         app = QtWidgets.QApplication(sys.argv)
         window = MainWindow()
         
-        workers = []
         frontends = []
         
+        anc350 = None
         try:
             from devices.attocube.anc350 import ANC350
-            worker = ANC350Worker(req_port=7000, pub_port=7001)
-            workers.append(worker)
-            worker.start()
-            a = ANC350(req_port=7000, pub_port=7001)
-            a.createDock(window, window.controlMenu)
-            frontends.append(a)
-            #window.kernel_client.execute("from devices.attocube.anc350 import ANC350")
-            #window.kernel_client.execute("anc350 = ANC350(req_port=7000, pub_port=7001)")
-        except:
-            print("Failed to load driver for Attocube ANC350")
-            
+            anc350 = ANC350()
+            anc350.createDock(window, window.controlMenu)
+            frontends.append(anc350)
+            window.kernel_client.execute("from devices.attocube.anc350 import ANC350")
+            window.kernel_client.execute("anc350 = ANC350()")
+        except Exception as e:
+            print("Failed to load driver for Attocube ANC350: ", str(e))
+
+        xbox = None
         try:
             from devices.misc.xbox import XBoxPad,XBoxWorker
-            worker = XBoxWorker(req_port=7005, pub_port=7006)
-            worker.start()
-            workers.append(worker)
-            x = XBoxPad(req_port=7005, pub_port=7006)
-            x.createDock(window, window.controlMenu)
-            frontends.append(x)
-            #window.kernel_client.execute("from devices.attocube.anc350 import ANC350")
-            #window.kernel_client.execute("anc350 = ANC350(req_port=7000, pub_port=7001)")
-        except:
-            print("Failed to load driver for Attocube ANC350")
-            
+            xbox = XBoxPad()
+            xbox.createDock(window, window.controlMenu)
+            frontends.append(xbox)
+            window.kernel_client.execute("from devices.misc.xbox import XBoxPad")
+            window.kernel_client.execute('xbox = XBoxPad()')
+        except Exception as e:
+            print("Failed to load driver for XBox pad: ", str(e))
+        
+        apt = None
+        try:
+            from devices.thorlabs.apt import APT
+            apt = APT()
+            apt.createDock(window, window.controlMenu)
+            frontends.append(apt)
+            window.kernel_client.execute("from devices.thorlabs.apt import APT")
+            window.kernel_client.execute("apt = APT()")
+        except Exception as e:
+            print("Failed to load driver for Thorlabs APT: ", str(e))
+        
+        
+        if xbox and apt:
+            from devices.misc import joystick_control
+            w = joystick_control.JoystickControlWidget(xbox, frontends)
+            window.addPage(w, "Pad control")
+        
         window.show()
         app.exec_()
-        
-        for w in workers:
-            w.terminate()
-        for w in workers:
-            w.join()
-        
+                
     run_app()

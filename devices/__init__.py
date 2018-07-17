@@ -1,1 +1,1 @@
-print("Laduje devices")
+from .device import *

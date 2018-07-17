@@ -20,6 +20,10 @@ class WorkerForDummyDevice(DeviceWorker):
         self.voltage = 0.2
         
         
+    def init_device(self):
+        """ This function will be called once upon starting the process """
+        print("Dummy device initialized")
+        
     def status(self):
         """ This function will be called periodically to monitor the state 
         of the device. It should return a dictionary describing the current
@@ -28,6 +32,7 @@ class WorkerForDummyDevice(DeviceWorker):
         d = super().status()
         d["connected"] = True
         d["voltage"] = self.voltage
+        print(d)
         return d
     
     @handler("Demo", "setVoltage")
@@ -42,6 +47,11 @@ class WorkerForDummyDevice(DeviceWorker):
     def incVoltage(self):
         print("incVoltage is performed by "+str(self.__class__)+" object")
         self.voltage += 1
+        
+    @handler("Demo", "getVoltage")
+    def getVoltage(self):
+        print("getVoltage is performed by "+str(self.__class__)+" object")
+        return self.voltage
     
     
     
@@ -52,7 +62,6 @@ class FrontEndForDummyDevice(DeviceOverZeroMQ):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.createDelegatedMethods("Demo")
-        # custom initialization here
         
         
     def createDock(self, parentWidget, menu=None):
@@ -82,7 +91,7 @@ class FrontEndForDummyDevice(DeviceOverZeroMQ):
     def updateSlot(self, status):
         """ This function receives periodic updates from the worker """
         self.voltageDisplay.setValue(status["voltage"])
-
+    
     
     
 def createDummyDevice():

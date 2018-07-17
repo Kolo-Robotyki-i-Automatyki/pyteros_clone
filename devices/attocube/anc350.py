@@ -88,6 +88,9 @@ class ANC350Worker(DeviceWorker):
 
 
 class ANC350(DeviceOverZeroMQ):
+    default_reqrep_port = 7200
+    default_pubsub_port = 7201
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.createDelegatedMethods("ANC350")
