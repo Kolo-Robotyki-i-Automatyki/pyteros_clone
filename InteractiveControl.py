@@ -126,6 +126,11 @@ if __name__ == '__main__':
             from devices.misc import joystick_control
             w = joystick_control.JoystickControlWidget(xbox, frontends)
             window.addPage(w, "Pad control")
+            
+        if apt:
+            from src import map_widget
+            w = map_widget.MapWidget(frontends)
+            window.addPage(w, "Map")
         
         window.show()
         app.exec_()

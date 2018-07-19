@@ -153,8 +153,8 @@ class DeviceWorker(Process):
                 notifier.send_multipart([b"status", msg])
                 continue
             
-            print("Raw request:", request)
-            print(request)
+            #print("Raw request:", request)
+            #print(request)
             try:
                 f = delegated_methods_db[(request[1],request[0])]
                 args = request[2]

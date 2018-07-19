@@ -308,8 +308,8 @@ class XBoxPad(DeviceOverZeroMQ):
         self.checkbox.setTristate(True)
         self.checkbox.setCheckState(QtCore.Qt.PartiallyChecked)
         layout.addWidget(self.checkbox)
-        self.textedit = QtWidgets.QTextEdit()
-        layout.addWidget(self.textedit)
+        #self.textedit = QtWidgets.QTextEdit()
+        #layout.addWidget(self.textedit)
         
         dock.setWidget(widget)
         dock.setAllowedAreas(QtCore.Qt.TopDockWidgetArea | QtCore.Qt.BottomDockWidgetArea)
@@ -321,11 +321,6 @@ class XBoxPad(DeviceOverZeroMQ):
             if 'connected' in status:
                 v = QtCore.Qt.Checked if status['connected'] else QtCore.Qt.Unchecked
                 self.checkbox.setCheckState(v)
-            self.textedit.setText(str(status))
+            #self.textedit.setText(str(status))
         
         self.createListenerThread(updateSlot)
-
-    
-    def updateInfo(self, state):
-        state = json.loads(state)
-        print(state)
