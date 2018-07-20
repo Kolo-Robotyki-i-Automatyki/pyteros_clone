@@ -2,15 +2,22 @@
 """
 """
 
-from PyQt5 import QtCore,QtWidgets
+from PyQt5 import QtCore,QtWidgets,QtGui
 import time
 
-
+dead_zone = 0.12
 
 def _create_apt_slave(apt, serial):
     """Creates a pair of a name and a function to move a stage """
     func = lambda velocity : apt.moveVelocity(serial, velocity)
     return ("APT s/n: %d" % serial, func)
+
+class Master():
+    def __init__(self, axis_id, combo, checkInverted, editSpeed):
+        self.axis_id = axis_id
+        self.combo = combo
+        self.checkInverted = checkInverted
+        self.editSpeed = editSpeed
 
 class JoystickControlWidget(QtWidgets.QWidget):
     """ A widget for interactive control of APT motors using XBoxPad """
@@ -37,13 +44,13 @@ class JoystickControlWidget(QtWidgets.QWidget):
     
 
     def refreshCombos(self):
-        for axis_id,combo in self.masters:
-            n = combo.currentIndex()
-            combo.clear()
-            combo.addItem("None")
+        for master in self.masters:
+            n = master.combo.currentIndex()
+            master.combo.clear()
+            master.combo.addItem("None")
             for s in self.slaves:
-                combo.addItem(s[0])
-            combo.setCurrentIndex(n)
+                master.combo.addItem(s[0])
+            master.combo.setCurrentIndex(n)
 
     
 
@@ -74,7 +81,14 @@ class JoystickControlWidget(QtWidgets.QWidget):
             combo.addItem("None")
             combo.setMinimumWidth(200)
             layout.addWidget(combo, row, 1)
-            self.masters.append( (axis_id, combo) )
+            layout.addWidget(QtWidgets.QLabel("Inv.:"), row, 2)
+            checkInverted = QtWidgets.QCheckBox();
+            layout.addWidget(checkInverted, row, 3)
+            layout.addWidget(QtWidgets.QLabel("Multiplier:"), row, 4)
+            editSpeed = QtWidgets.QLineEdit()
+            editSpeed.setValidator(QtGui.QDoubleValidator())
+            layout.addWidget(editSpeed, row, 5)
+            self.masters.append( Master(axis_id, combo, checkInverted, editSpeed) )
 
         buttonlayout = QtWidgets.QHBoxLayout()
         self.refreshButton = QtWidgets.QPushButton("Refresh")
@@ -84,7 +98,7 @@ class JoystickControlWidget(QtWidgets.QWidget):
         self.startButton.setCheckable(True)
         self.startButton.clicked.connect(self.start)
         buttonlayout.addWidget(self.startButton)
-        layout.addLayout(buttonlayout, len(self.masters)+2,0,1,3)
+        layout.addLayout(buttonlayout, len(self.masters)+2,0,1,6)
         layout.setColumnStretch(5,6)
         layout.setRowStretch(10,6)
         
@@ -93,15 +107,15 @@ class JoystickControlWidget(QtWidgets.QWidget):
         if activate:
             self.startButton.setText("Stop control")
             self.startButton.setChecked(True)
-            for axis_id,combo in self.masters:
-                combo.setDisabled(True)
+            for master in self.masters:
+                master.combo.setDisabled(True)
             self.timer.start()
         else:
             self.startButton.setText("Start control")
             self.startButton.setChecked(False)
-            for axis_id,combo in self.masters:
-                combo.setEnabled(True)
-                slave_nr = combo.currentIndex() - 1
+            for master in self.masters:
+                master.combo.setEnabled(True)
+                slave_nr = master.combo.currentIndex() - 1
                 if slave_nr >= 0:
                     self.slaves[slave_nr][1](0)
             
@@ -110,13 +124,19 @@ class JoystickControlWidget(QtWidgets.QWidget):
             return
         state = self.xbox.currentStatus()
 
-        for axis_id,combo in self.masters:
-            if axis_id not in state:
+        for master in self.masters:
+            if master.axis_id not in state:
                 continue
-            value = state[axis_id]*2
-            if abs(value) < 0.1:
+            value = state[master.axis_id] * 2
+            if abs(value) < dead_zone:
                 value = 0
-            slave_nr = combo.currentIndex() - 1
+            else:
+                value = value * (abs(value) - dead_zone) / (1 - dead_zone)
+            if master.checkInverted.isChecked():
+                value = -value
+            if len(master.editSpeed.text()) != 0:
+                value *= float(master.editSpeed.text())
+            slave_nr = master.combo.currentIndex() - 1
             if slave_nr >= 0:
                 self.slaves[slave_nr][1](value)
         self.timer.start(80)

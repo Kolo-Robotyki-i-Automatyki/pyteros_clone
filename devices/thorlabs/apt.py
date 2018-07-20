@@ -7,7 +7,7 @@ import time
 
 default_req_port = 7008
 default_pub_port = 7009
-
+ 
 class APTWorker(DeviceWorker):
     """ Class managing all Thorlabs APT  motor controllers """
     
@@ -22,7 +22,10 @@ class APTWorker(DeviceWorker):
         for n in serials:
             print("SN: %d" % n)
             mot = apt_wrapper.Motor(n)
+            mot.acceleration = 5
             mot.initial_parameters = mot.get_velocity_parameters()
+			#mot.initial_parameters[1] = 3 * mot.initial_parameters[1]
+			#mot.set_velocity_parameters(*mot.initial_parameters)
             mot.prev_request_time = time.time()
             self.motors[n] = mot
         
@@ -64,8 +67,7 @@ class APTWorker(DeviceWorker):
         """ velocity should be between -1 to 1 """
         mot = self.motors[serial]
         self.wait(mot)
-        param = mot.initial_parameters[:2]+(abs(velocity)*mot.initial_parameters[2],)
-        mot.set_velocity_parameters(*param)
+        mot.maximum_velocity = abs(velocity)*mot.initial_parameters[2]
         direction = 1 if velocity > 0 else 2
         mot.move_velocity(direction)
         
