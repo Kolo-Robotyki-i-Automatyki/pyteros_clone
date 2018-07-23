@@ -1,18 +1,21 @@
 from PyQt5 import QtWidgets,QtCore
 
 import ctypes as ct
-import time
 from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,handler
+from PyQt5 import QtWidgets,QtCore
+import time
 
 import os
 os.environ["PATH"] = \
            "C:\\pyLUMS\\devices\\attocube\\" + os.pathsep + os.environ["PATH"]
 attodll = ct.windll.LoadLibrary("hvpositionerv2.dll")
 
+default_req_port = 7006
+default_pub_port = 7007
 
 class ANC350Worker(DeviceWorker):
-    def __init__(self, *args, **kwargs):        
-        super().__init__(*args, **kwargs)
+    def __init__(self, req_port=default_req_port, pub_port=default_pub_port, **kwargs):
+        super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
         self.connected = False
         
     def status(self):
@@ -71,11 +74,28 @@ class ANC350Worker(DeviceWorker):
     def moveAbsolute(self, axis, target, wait=False):
         attodll.PositionerMoveAbsolute(self.handle, ct.c_int32(axis), \
                                         ct.c_int32(target*1000), ct.c_int32(0))
-    
+
     @handler("ANC350", "stopMovement")
     def stopMovement(self, axis):
-        attodll.PositionerStopMoving(self.handle,ct.c_int32(axis))
-    
+        attodll.PositionerStopMoving(self.handle, ct.c_int32(axis))
+
+    @handler("ANC350", "moveVelocity")
+    def moveVelocity(self, axis, frequency):
+        if frequency == 0:
+            self.stopMovement(axis)
+            return
+        if frequency < 0:
+            frequency = -frequency
+            dir = 1
+        else:
+            dir = 0
+        attodll.PositionerFrequency(self.handle, ct.c_int32(axis), ct.c_int32(frequency))
+        attodll.PositionerMoveContinuous(self.handle, ct.c_int32(axis), ct.c_int32(dir))
+
+    @handler("ANC350", "stopMovement")
+    def stopMovement(self, axis):
+        attodll.PositionerStopMoving(self.handle, ct.c_int32(axis))
+
     @handler("ANC350", "axisPos")
     def axisPos(self, axis):
         if not self.connected:
@@ -88,17 +108,54 @@ class ANC350Worker(DeviceWorker):
 
 
 class ANC350(DeviceOverZeroMQ):
-    default_reqrep_port = 7200
-    default_pubsub_port = 7201
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+
+    def __init__(self, req_port=default_req_port, pub_port=default_pub_port, **kwargs):
+        super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
         self.createDelegatedMethods("ANC350")
-        
-    
+
     def __del__(self):
         pass
-    
+
+    def createDock(self, parentWidget, menu=None):
+        dock = QtWidgets.QDockWidget("Attocube ANC350", parentWidget)
+        widget = QtWidgets.QWidget(parentWidget)
+        layout = QtWidgets.QHBoxLayout(parentWidget)
+        widget.setLayout(layout)
+
+        self.connectButton = QtWidgets.QPushButton("Connect", parentWidget)
+        self.connectButton.setCheckable(True)
+
+        def onButtonToggled(state):
+            if state:
+                self.connectToDevice()
+            else:
+                self.disconnectFromDevice()
+
+        self.connectButton.toggled.connect(onButtonToggled)
+        layout.addWidget(self.connectButton)
+
+        axis_widgets = {axis: self.createWidgetForAxis(layout, axis)
+                        for axis in range(3)}
+
+        dock.setWidget(widget)
+        dock.setAllowedAreas(QtCore.Qt.TopDockWidgetArea | QtCore.Qt.BottomDockWidgetArea)
+        parentWidget.addDockWidget(QtCore.Qt.TopDockWidgetArea, dock)
+        if menu:
+            menu.addAction(dock.toggleViewAction())
+
+        self.createListenerThread(self.updateSlot)
+
+    def createWidgetForAxis(self, layout, axis):
+        line = QtWidgets.QFrame()
+        line.setFrameShape(QtWidgets.QFrame.VLine)
+        line.setFrameShadow(QtWidgets.QFrame.Sunken)
+        layout.addWidget(line)
+        label = QtWidgets.QLabel("Axis " + str(axis))
+        layout.addWidget(label)
+        lineedit = QtWidgets.QLineEdit()
+        layout.addWidget(lineedit)
+        return (lineedit,)
+
     def connectToDevice(self):
         self.connectButton.setText("Connecting")
         self.connectButton.setChecked(True)
@@ -108,7 +165,7 @@ class ANC350(DeviceOverZeroMQ):
             self.connectButton.setChecked(True)
         except:
             self.disconnectFromDevice()
-    
+
     def disconnectFromDevice(self):
         try:
             self.connectButton.setText("Connect")
@@ -116,51 +173,13 @@ class ANC350(DeviceOverZeroMQ):
             self.disconnect()
         except:
             pass
+
     
-    def createWidgetForAxis(self, layout, axis):
-        line = QtWidgets.QFrame()
-        line.setFrameShape(QtWidgets.QFrame.VLine)
-        line.setFrameShadow(QtWidgets.QFrame.Sunken)
-        layout.addWidget(line)
-        label = QtWidgets.QLabel("Axis "+str(axis))
-        layout.addWidget(label)
-        lineedit = QtWidgets.QLineEdit()
-        layout.addWidget(lineedit)
-        return (lineedit,)
-        
-    
-    
-    def createDock(self, parentWidget, menu=None):
-        dock = QtWidgets.QDockWidget("Attocube ANC350", parentWidget)
-        widget = QtWidgets.QWidget(parentWidget)
-        layout = QtWidgets.QHBoxLayout(parentWidget)
-        widget.setLayout(layout)
-        
-        self.connectButton = QtWidgets.QPushButton("Connect", parentWidget)
-        self.connectButton.setCheckable(True)
-        def onButtonToggled(state):
-            if state:
-                self.connectToDevice()
-            else:
-                self.disconnectFromDevice()
-        self.connectButton.toggled.connect(onButtonToggled)
-        layout.addWidget(self.connectButton)
-        
-        axis_widgets = {axis: self.createWidgetForAxis(layout,axis) 
-                                                    for axis in range(3)}
-        
-        dock.setWidget(widget)
-        dock.setAllowedAreas(QtCore.Qt.TopDockWidgetArea | QtCore.Qt.BottomDockWidgetArea)
-        parentWidget.addDockWidget(QtCore.Qt.TopDockWidgetArea, dock)
-        if menu:
-            menu.addAction(dock.toggleViewAction())
-        
-        def updateSlot(status):
-            for axis in axis_widgets:
-                axis_widgets[axis][0].setValue(status["axis%d_pos" % axis])
-                print(status["axis%d_pos" % axis])
-        
-        self.createListenerThread(self.updateSlot)
+
+    def updateSlot(self, status):
+        for axis in axis_widgets:
+            axis_widgets[axis][0].setValue(status["axis%d_pos" % axis])
+            print(status["axis%d_pos" % axis])
             
             
         

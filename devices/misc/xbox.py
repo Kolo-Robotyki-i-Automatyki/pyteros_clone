@@ -108,8 +108,8 @@ ERROR_DEVICE_NOT_CONNECTED = 1167
 ERROR_SUCCESS = 0
 
 
-default_req_port = 7003
-default_pub_port = 7004
+default_req_port = 7004
+default_pub_port = 7005
 
 
 class XBoxWorker(DeviceWorker):
