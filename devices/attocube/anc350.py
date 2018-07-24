@@ -21,12 +21,12 @@ class ANC350Worker(DeviceWorker):
     def status(self):
         d = super().status()
         d["connected"] = self.connected
-        for i in range(3):
+        for i in self.axes():
             d["axis%d_pos" % i] = self.axisPos(i)
         return d
     
     @handler("ANC350", "connect")
-    def connect(self):
+    def init_device(self):
         if self.connected:
             return
         class positionerinfo(ct.Structure):
@@ -41,11 +41,23 @@ class ANC350Worker(DeviceWorker):
         if ret != 0:
             return Exception("Attocube:PositionerConnect", "Function failed")
         self.connected = True
-        for axis in range(3):
-            self.enableAxis(axis)
+
+        for axis in range(9):
             attodll.PositionerStopDetection(self.handle,ct.c_int32(axis), \
                                              ct.c_bool(False))
-    
+        time.sleep(0.5)
+        self.axesList = []
+        self.axisDirection = {}
+        for axis in range(9):
+            if self.axisPos(axis) != 0:
+                self.axisDirection[axis] = 0
+                self.axesList.append(axis)
+        print("Following axes are now enabled: ", self.axes())
+
+    @handler("ANC350", "axes")
+    def axes(self):
+        return self.axesList
+
     @handler("ANC350", "disconnect")
     def disconnect(self):
         if not self.connected:
@@ -62,14 +74,15 @@ class ANC350Worker(DeviceWorker):
     @handler("ANC350", "disableAxis")
     def disableAxis(self, axis):
         attodll.PositionerSetOutput(self.handle, ct.c_int32(axis), False)
-        
+
+    @handler("ANC350", "moveSteps")
     def moveSteps(self, axis, steps):
         """Number of steps can be positive or negative"""
         d = ct.c_int32(0 if steps>0 else 1)
         for i in range(abs(steps)):
             self.dll.PositionerMoveSingleStep(self.handle, ct.c_int32(axis), d)
             time.sleep(0.01)
-            
+
     @handler("ANC350", "moveAbsolute")
     def moveAbsolute(self, axis, target, wait=False):
         attodll.PositionerMoveAbsolute(self.handle, ct.c_int32(axis), \
@@ -83,6 +96,7 @@ class ANC350Worker(DeviceWorker):
     def moveVelocity(self, axis, frequency):
         if frequency == 0:
             self.stopMovement(axis)
+            self.axisDirection[axis] = 0
             return
         if frequency < 0:
             frequency = -frequency
@@ -90,6 +104,16 @@ class ANC350Worker(DeviceWorker):
         else:
             dir = 0
         attodll.PositionerFrequency(self.handle, ct.c_int32(axis), ct.c_int32(frequency))
+        if 1 - 2 * dir != self.axisDirection[axis]:
+            attodll.PositionerMoveContinuous(self.handle, ct.c_int32(axis), ct.c_int32(dir))
+        self.axisDirection[axis] = 1 - 2 * dir
+
+    @handler("ANC350", "setFrequency")
+    def setFrequency(self, axis, frequency):
+        attodll.PositionerFrequency(self.handle, ct.c_int32(axis), ct.c_int32(frequency))
+
+    @handler("ANC350", "moveContinous")
+    def moveContinous(self, axis, dir):
         attodll.PositionerMoveContinuous(self.handle, ct.c_int32(axis), ct.c_int32(dir))
 
     @handler("ANC350", "stopMovement")
@@ -101,10 +125,18 @@ class ANC350Worker(DeviceWorker):
         if not self.connected:
             return 0
         pos = ct.c_int32()
-        attodll.PositionerGetPosition(self.handle,ct.c_int32(axis), \
-                                       ct.byref(pos))
+        attodll.PositionerGetPosition(self.handle, ct.c_int32(axis), \
+                                      ct.byref(pos))
         return pos.value / 1000.
 
+    @handler("ANC350", "axisStatus")
+    def axisStatus(self, axis):
+        if not self.connected:
+            return 0
+        status = ct.c_int32()
+        attodll.PositionerGetStatus(self.handle,ct.c_int32(axis), \
+                                       ct.byref(status))
+        return status.value
 
 
 class ANC350(DeviceOverZeroMQ):
@@ -134,8 +166,8 @@ class ANC350(DeviceOverZeroMQ):
         self.connectButton.toggled.connect(onButtonToggled)
         layout.addWidget(self.connectButton)
 
-        axis_widgets = {axis: self.createWidgetForAxis(layout, axis)
-                        for axis in range(3)}
+        self.axis_widgets = {axis: self.createWidgetForAxis(layout, axis)
+                        for axis in self.axes()}
 
         dock.setWidget(widget)
         dock.setAllowedAreas(QtCore.Qt.TopDockWidgetArea | QtCore.Qt.BottomDockWidgetArea)
@@ -174,11 +206,9 @@ class ANC350(DeviceOverZeroMQ):
         except:
             pass
 
-    
-
     def updateSlot(self, status):
-        for axis in axis_widgets:
-            axis_widgets[axis][0].setValue(status["axis%d_pos" % axis])
+        for axis in self.axis_widgets:
+            self.axis_widgets[axis][0].setText(str(status["axis%d_pos" % axis]))
             print(status["axis%d_pos" % axis])
             
             
