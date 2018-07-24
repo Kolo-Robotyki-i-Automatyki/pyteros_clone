@@ -5,12 +5,19 @@
 from PyQt5 import QtCore,QtWidgets,QtGui
 import time
 
-dead_zone = 0.12
+dead_zone = 0.14
 
 def _create_apt_slave(apt, serial):
     """Creates a pair of a name and a function to move a stage """
     func = lambda velocity : apt.moveVelocity(serial, velocity)
     return ("APT s/n: %d" % serial, func)
+
+def _create_anc350_slave(anc350, axis):
+    """Creates a pair of a name and a function to move a stage """
+    def f(velocity):
+        anc350.moveVelocity(axis, int(velocity))
+    #func = lambda velocity : anc350.moveVelocity(axis, velocity)
+    return ("Attocube ANC350 axis: %d" % axis, f)
 
 class Master():
     def __init__(self, axis_id, combo, checkInverted, editSpeed):
@@ -58,15 +65,23 @@ class JoystickControlWidget(QtWidgets.QWidget):
         """ Search through list of devices to find usable slaves to be controlled"""
         self.start(False)
         self.slaves = []
-        
+
         try:
             from ..thorlabs.apt import APT
             for apt in filter(lambda d: isinstance(d, APT), self.device_list):
                 for serial in apt.devices():
-                    self.slaves.append( _create_apt_slave(apt,serial) )
+                    self.slaves.append(_create_apt_slave(apt, serial))
         except Exception as e:
             print(e)
-            
+
+        try:
+            from ..attocube.anc350 import ANC350
+            for anc350 in filter(lambda d: isinstance(d, ANC350), self.device_list):
+                for axis in anc350.axes():
+                    self.slaves.append(_create_anc350_slave(anc350, axis))
+        except Exception as e:
+            print(e)
+
         self.refreshCombos()
                 
         

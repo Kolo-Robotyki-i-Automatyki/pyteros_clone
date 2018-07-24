@@ -108,15 +108,15 @@ ERROR_DEVICE_NOT_CONNECTED = 1167
 ERROR_SUCCESS = 0
 
 
-default_req_port = 7003
-default_pub_port = 7004
+default_req_port = 7004
+default_pub_port = 7005
 
 
 class XBoxWorker(DeviceWorker):
 
-    def __init__(self, req_port=default_req_port, pub_port=default_pub_port, **kwargs):
+    def __init__(self, req_port = default_req_port, pub_port = default_pub_port, **kwargs):
         self.device_number = 0
-        super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
+        super().__init__(req_port = req_port, pub_port = pub_port, **kwargs)
 
         self._last_state = self.get_state()
         self.received_packets = 0
@@ -126,7 +126,7 @@ class XBoxWorker(DeviceWorker):
         #  the values for analog axis.
         choices = [self.translate_identity, self.translate_using_data_size]
         self.translate = choices[True]
-        
+
     def init_device(self):
         battery = self.get_battery_information()
         print(battery)
@@ -174,7 +174,7 @@ class XBoxWorker(DeviceWorker):
         # Set up function argument types and return type
         XInputGetBatteryInformation = xinput.XInputGetBatteryInformation
         XInputGetBatteryInformation.argtypes = [ctypes.c_uint, ctypes.c_ubyte, ctypes.POINTER(XINPUT_BATTERY_INFORMATION)]
-        XInputGetBatteryInformation.restype = ctypes.c_uint 
+        XInputGetBatteryInformation.restype = ctypes.c_uint
 
         battery = XINPUT_BATTERY_INFORMATION(0,0)
         XInputGetBatteryInformation(self.device_number, BATTERY_DEVTYPE_GAMEPAD, ctypes.byref(battery))
@@ -201,12 +201,12 @@ class XBoxWorker(DeviceWorker):
         if missed_packets:
             pass
         self.missed_packets += missed_packets
- 
+
     def status(self):
         d = super().status()
-        
+
         state = self.get_state()
-        
+
         if not state:
             d['connected'] = False
             return d
@@ -215,7 +215,7 @@ class XBoxWorker(DeviceWorker):
         d['connected'] = True
         if state.packet_number != self._last_state.packet_number:
             self.update_packet_count(state)
-        
+
         axis_fields = dict(XINPUT_GAMEPAD._fields_)
         axis_fields.pop('buttons')
         for axis, type in list(axis_fields.items()):
@@ -232,8 +232,8 @@ class XBoxWorker(DeviceWorker):
             #   (axis == 'right_trigger' or axis == 'left_trigger') and new_val == 0 and abs(old_val - new_val) > 0.00000000500000000):
             #    d[axis] = new_val:
             d[axis] = new_val
-        
-        
+
+
         changed = state.gamepad.buttons ^ self._last_state.gamepad.buttons
         changed = get_bit_values(changed, 16)
         buttons_state = get_bit_values(state.gamepad.buttons, 16)
@@ -242,10 +242,10 @@ class XBoxWorker(DeviceWorker):
         button_numbers = count(1)
         for c,n,s in zip(changed, button_numbers, buttons_state):
             d["button%d" % n] = s
-        
+
         self._last_state = state
         return d
-    
+
     @handler("XBox", "currentStatus")
     def currentStatus(self):
         return self.status()
@@ -290,13 +290,13 @@ def sample_first_joystick():
 
 
 
-class XBoxPad(DeviceOverZeroMQ):    
-    def __init__(self, req_port=default_req_port, pub_port=default_pub_port, **kwargs):
-        super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
+class XBoxPad(DeviceOverZeroMQ):
+    def __init__(self, req_port = default_req_port, pub_port = default_pub_port, **kwargs):
+        super().__init__(req_port = req_port, pub_port = pub_port, **kwargs)
         self.createDelegatedMethods("XBox")
 
-    
-    def createDock(self, parentWidget, menu=None):
+
+    def createDock(self, parentWidget, menu = None):
         from PyQt5 import QtWidgets,QtCore
         
         dock = QtWidgets.QDockWidget("XBox pad", parentWidget)

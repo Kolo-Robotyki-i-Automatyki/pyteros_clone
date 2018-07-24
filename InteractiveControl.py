@@ -120,9 +120,8 @@ if __name__ == '__main__':
             window.kernel_client.execute("apt = APT()")
         except Exception as e:
             print("Failed to load driver for Thorlabs APT: ", str(e))
-        
-        
-        if xbox and apt:
+
+        if xbox and apt and anc350: # TODO: upgrade joystick.control.py so it will work with only apt or only enc350
             from devices.misc import joystick_control
             w = joystick_control.JoystickControlWidget(xbox, frontends)
             window.addPage(w, "Pad control")

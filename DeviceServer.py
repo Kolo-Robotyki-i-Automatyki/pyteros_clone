@@ -103,9 +103,9 @@ class WidgetForProcess(QtWidgets.QWidget):
             self.process = None
 
     def createProcess(self):
-        return self.process_class(req_port=self.req_port, pub_port=self.pub_port)
-        
-    def startProcess(self, start=True):
+        return self.process_class(req_port = self.req_port, pub_port = self.pub_port)
+
+    def startProcess(self, start = True):
         if start:
             self.process = self.createProcess()
             self.process.daemon = True
@@ -116,8 +116,8 @@ class WidgetForProcess(QtWidgets.QWidget):
                 self.process.terminate()
                 self.process.join()
                 self.process = None
-    
-    
+
+
     def checkOnProcess(self):
         if self.process == None:
             self.startbutton.setChecked(False)
@@ -135,25 +135,25 @@ class WidgetForProcess(QtWidgets.QWidget):
             print ('finished')
             self.process.join()
             self.process = None
-        
-        
+
+
 
 class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self, parent=None):
+    def __init__(self, parent = None):
         super().__init__(parent)
         self.createCentralWidget()
         self.setupIcons()
-        
+
         quitAct = QtWidgets.QAction("&Quit", self);
         quitAct.setShortcuts(QtGui.QKeySequence.Quit)
         quitAct.setStatusTip("Quit the application")
         quitAct.triggered.connect(self.close)
         fileMenu = self.menuBar().addMenu("&File")
-        fileMenu.addAction(quitAct)            
+        fileMenu.addAction(quitAct)
         self.createTabs()
-    
+
     def createCentralWidget(self):
-        self.toolBox = QtWidgets.QToolBox()       
+        self.toolBox = QtWidgets.QToolBox()
         self.setCentralWidget(self.toolBox)
 
     def setupIcons(self):
@@ -167,39 +167,39 @@ class MainWindow(QtWidgets.QMainWindow):
 
 
     def createTabs(self):
-        
+
         try:
-            from devices.attocube.anc350 import ANC350,ANC350Worker
-            widget = WidgetForProcess(pub_port=ANC350.pub_port, 
-                                      req_port=ANC350.req_port,
-                                      process_class=ANC350Worker)
+            from devices.attocube import anc350
+            widget = WidgetForProcess(pub_port = anc350.default_pub_port,
+                                      req_port = anc350.default_req_port,
+                                      process_class = anc350.ANC350Worker)
             self.toolBox.addItem(widget, "ANC350")
         except Exception as e:
             print(str(e))
-        
+
         try:
             from devices.misc import xbox
-            widget = WidgetForProcess(pub_port=xbox.default_pub_port, 
-                                      req_port=xbox.default_req_port,
-                                      process_class=xbox.XBoxWorker)
+            widget = WidgetForProcess(pub_port = xbox.default_pub_port,
+                                      req_port = xbox.default_req_port,
+                                      process_class = xbox.XBoxWorker)
             self.toolBox.addItem(widget, "XBox pad")
         except Exception as e:
             print(str(e))
-        
+
         #try:
         #    from devices.misc.xbox import XBoxPad,XBoxWorker
-        #    widget = WidgetForProcess(pub_port=6998, 
+        #    widget = WidgetForProcess(pub_port=6998,
         #                              req_port=6999,
         #                              process_class=WorkerForDummyDevice)
         #    self.toolBox.addItem(widget, "Demo")
         #except Exception as e:
         #    print(str(e))
-            
+
         try:
             from devices.thorlabs import apt
-            widget = WidgetForProcess(pub_port=apt.default_pub_port, 
-                                      req_port=apt.default_req_port,
-                                      process_class=apt.APTWorker)
+            widget = WidgetForProcess(pub_port = apt.default_pub_port,
+                                      req_port = apt.default_req_port,
+                                      process_class = apt.APTWorker)
             self.toolBox.addItem(widget, "Thorlabs APT")
         except Exception as e:
             print(str(e))
