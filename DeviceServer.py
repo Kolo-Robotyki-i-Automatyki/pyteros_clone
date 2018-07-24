@@ -170,15 +170,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         try:
             from devices.attocube import anc350
-<<<<<<< HEAD
             widget = WidgetForProcess(pub_port = anc350.default_pub_port,
                                       req_port = anc350.default_req_port,
                                       process_class = anc350.ANC350Worker)
-=======
-            widget = WidgetForProcess(pub_port=anc350.default_pub_port,
-                                      req_port=anc350.default_req_port,
-                                      process_class=anc350.ANC350Worker)
->>>>>>> 5907c0dd187cdce2858048cbb79babc5a4dcbed6
             self.toolBox.addItem(widget, "ANC350")
         except Exception as e:
             print(str(e))
