@@ -169,10 +169,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def createTabs(self):
         
         try:
-            from devices.attocube.anc350 import ANC350,ANC350Worker
-            widget = WidgetForProcess(pub_port=ANC350.pub_port, 
-                                      req_port=ANC350.req_port,
-                                      process_class=ANC350Worker)
+            from devices.attocube import anc350
+            widget = WidgetForProcess(pub_port=anc350.default_pub_port,
+                                      req_port=anc350.default_req_port,
+                                      process_class=anc350.ANC350Worker)
             self.toolBox.addItem(widget, "ANC350")
         except Exception as e:
             print(str(e))

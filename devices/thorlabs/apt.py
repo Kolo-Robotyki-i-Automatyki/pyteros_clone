@@ -24,8 +24,6 @@ class APTWorker(DeviceWorker):
             mot = apt_wrapper.Motor(n)
             mot.acceleration = 5
             mot.initial_parameters = mot.get_velocity_parameters()
-			#mot.initial_parameters[1] = 3 * mot.initial_parameters[1]
-			#mot.set_velocity_parameters(*mot.initial_parameters)
             mot.prev_request_time = time.time()
             self.motors[n] = mot
         
