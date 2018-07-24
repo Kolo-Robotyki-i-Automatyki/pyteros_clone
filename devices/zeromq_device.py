@@ -14,22 +14,43 @@ def handler(cls,name):
 
 context = zmq.Context()
 
-class DeviceOverZeroMQ:
+class DeviceOverZeroMQ(device.Device):
     def __init__(self, req_port, pub_port=None, host="localhost"):
         self.channel = "tcp://"+host+":"+str(req_port)
         self.client = context.socket(zmq.REQ)
         self.client.connect(self.channel)
+        self.poll = zmq.Poller()
+        self.poll.register(self.client, zmq.POLLIN)        
+        self.request_timeout = 2000 # 2s in milliseconds
         if pub_port:
             self.pub_channel = "tcp://"+host+":"+str(pub_port)
         else:
             self.pub_channel = None
+        self.createDelegatedMethods("DeviceWorker")
+        
+        
 
     def _makeFun(self, cls_name, method_name):
         def fun(self, *args):
             #print("internal: func: " + str(method_name))
             obj = (method_name, cls_name, args)
             self.client.send_json(obj)
-            return self.client.recv_json()
+            
+            
+            socks = dict(self.poll.poll(self.request_timeout))
+            if socks.get(self.client) == zmq.POLLIN:
+                return self.client.recv_json()
+            else:
+                # Timeout. 
+                # Socket is confused. Close and reopen to reset its state.
+                self.client.setsockopt(zmq.LINGER, 0)
+                self.client.close()
+                self.poll.unregister(self.client)
+                self.client = context.socket(zmq.REQ)
+                self.client.connect(self.channel)
+                self.poll.register(self.client, zmq.POLLIN)
+                raise ConnectionError
+                
         return fun
         
 
@@ -84,7 +105,7 @@ def reminderFunc(context,req_channel,rate=0.1):
     reminder.connect(req_channel)
     try:
         while True:
-            reminder.send_json( ("status?", None, None))
+            reminder.send_json( ("status", None, None))
             reminder.recv_json()
             time.sleep(rate)
     except:
@@ -119,6 +140,9 @@ class DeviceWorker(Process):
     def status(self):
         return {}
     
+    @handler("DeviceWorker", "status_to_save")
+    def status_to_save(self):
+        return self.status()
 
     def init_device(self):
         pass
@@ -147,7 +171,7 @@ class DeviceWorker(Process):
             request = server.recv_json()
             if request[0] == 'quit':
                 break
-            if request[0] == "status?":
+            if request[0] == "status":
                 msg = json.dumps(self.status()).encode('ascii')
                 server.send(msg)
                 notifier.send_multipart([b"status", msg])
