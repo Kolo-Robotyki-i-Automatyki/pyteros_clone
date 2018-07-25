@@ -94,7 +94,7 @@ class MapWidget(QtWidgets.QWidget):
         hlayout2.addWidget(button)
         button.clicked.connect(self.loadImage)
         
-        sides = {"left": -100, "right": 100, "bottom": -100, "top": 100}
+        sides = {"x": -100, "y": 100, "width": -100, "height": 100}
         self.edits = {}
         for s in sides:
             hlayout2.addWidget(QtWidgets.QLabel(s +":"))
@@ -183,15 +183,15 @@ class MapWidget(QtWidgets.QWidget):
     
     def updatePixmap(self):
         if self.bg_item:
-            l = float(self.edits["left"].text())
-            r = float(self.edits["right"].text())
-            t = float(self.edits["top"].text())
-            b = float(self.edits["bottom"].text())
+            x = float(self.edits["x"].text())
+            y = float(self.edits["y"].text())
+            w = float(self.edits["width"].text())
+            h = float(self.edits["height"].text())
             self.bg_item.resetTransform()
             rect = self.bg_item.boundingRect()
-            translation = QtGui.QTransform.fromTranslate(l, b)
+            translation = QtGui.QTransform.fromTranslate(x, y)
             self.bg_item.setTransform(translation)
-            scaling = QtGui.QTransform.fromScale((r-l)/rect.width(), (t-b)/rect.height())
+            scaling = QtGui.QTransform.fromScale(w/rect.width(), h/rect.height())
             self.bg_item.setTransform(scaling, True)
             
     def start(self, activate=True):

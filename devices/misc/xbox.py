@@ -15,6 +15,7 @@ pip install --upgrade http://pyglet.googlecode.com/archive/tip.zip
 
 import ctypes
 import sys
+import math
 import time
 from operator import itemgetter, attrgetter
 from itertools import count
@@ -217,6 +218,7 @@ class XBoxWorker(DeviceWorker):
             self.update_packet_count(state)
 
         axis_fields = dict(XINPUT_GAMEPAD._fields_)
+
         axis_fields.pop('buttons')
         for axis, type in list(axis_fields.items()):
             old_val = getattr(self._last_state.gamepad, axis)
