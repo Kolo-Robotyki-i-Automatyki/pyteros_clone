@@ -31,26 +31,39 @@ class ZoomableGraphicsView(QtWidgets.QGraphicsView):
         self.scale(zoomFactor, zoomFactor)
     
         # Get the new position
-        #newPos = self.mapToScene(event.pos())
-    
+        newPos = self.mapToScene(event.pos())
         # Move scene to old position
-        #delta = newPos - oldPos
-        #self.translate(delta.x(), delta.y())
+        delta = newPos - oldPos
+
+        old_transform = self.transform()
+        scene_rect = self.sceneRect()
+        self.setSceneRect(scene_rect.x() - delta.x(), scene_rect.y() - delta.y(), scene_rect.width(), scene_rect.height())
+        self.setTransform(old_transform)
+
 
 
 def _create_apt_poll(apt, serial):
     """Creates a pair of a name and a function to get stage position """
-    func = lambda : apt.position(serial)
+    func = lambda: apt.position(serial)
     return ("APT s/n: %d" % serial, func)
-    
+
+def _create_anc350_poll(anc350, axis):
+    """Creates a pair of a name and a function to get stage position """
+    def f():
+        return anc350.axisPos(axis)
+    return ("Attocube ANC350 axis: %d" % axis, f)
+
 
 class MapWidget(QtWidgets.QWidget):
     def __init__(self, device_list, parent=None):
         super().__init__(parent)
         self.device_list = device_list
+        self.slaves = []
+        self.pools = []
+        self.bg_item = None
         
         self.timer = QtCore.QTimer(self)
-        self.timer.setInterval(500)
+        self.timer.setInterval(100)
         self.timer.timeout.connect(self.timeout)
         self.timer.start()
         self.active = False
@@ -143,8 +156,6 @@ class MapWidget(QtWidgets.QWidget):
         self.bg_item = None
         
         pixmap = QtGui.QPixmap()
-        self.bg_item = QtWidgets.QGraphicsPixmapItem(pixmap)
-        self.scene.addItem(self.bg_item)
         
     def loadImage(self):
         fileName = QtWidgets.QFileDialog.getOpenFileName(self, "Load sample image", 
@@ -152,7 +163,7 @@ class MapWidget(QtWidgets.QWidget):
         fileName = fileName[0]
         if not fileName:
             return
-        
+
         if self.bg_item:
             self.scene.removeItem(self.bg_item)
             del(self.bg_item)
@@ -188,35 +199,47 @@ class MapWidget(QtWidgets.QWidget):
             
     def refreshCombos(self):
         self.start(False)
-        slaves = []
+        self.pools = []
+        self.slaves = []
         
         try:
             from devices.thorlabs.apt import APT
             for apt in filter(lambda d: isinstance(d, APT), self.device_list):
                 for serial in apt.devices():
-                    slaves.append( _create_apt_poll(apt,serial) )
+                    self.pools.append( _create_apt_poll(apt, serial) )
+                    #self.slaves.append( _create_apt_slave(apt, serial) )
+        except Exception as e:
+            print(e)
+
+        try:
+            from devices.attocube.anc350 import ANC350
+            for anc350 in filter(lambda d: isinstance(d, ANC350), self.device_list):
+                for axis in anc350.axes():
+                    self.pools.append(_create_anc350_poll(anc350, axis))
+                    #self.slaves.append(_create_anc350_slave(anc350, axis))
         except Exception as e:
             print(e)
         
-        for direction,combo in self.combos.items():
+        for direction ,combo in self.combos.items():
             n = combo.currentIndex()
             combo.clear()
             combo.addItem("None", lambda : None)
-            for name,func in slaves:
+            for name, func in self.pools:
                 combo.addItem(name, func)
             combo.setCurrentIndex(n)
             
             
     def timeout(self):
         if self.active:
-            for direction,combo in self.combos.items():
-                pos = combo.currentData()()
-                if pos is None:
+            for direction, combo in self.combos.items():
+                if combo.currentText() == "None":
                     return
+                device_id = combo.currentIndex() - 1
+                print(self.pools[device_id][1])
                 if direction == "x":
-                    self.cursor.setX(pos)
+                    self.cursor.setX(self.pools[device_id][1]())
                 else:
-                    self.cursor.setY(pos)
+                    self.cursor.setY(self.pools[device_id][1]())
 
 
 if __name__ == '__main__':
