@@ -133,15 +133,21 @@ class JoystickControlWidget(QtWidgets.QWidget):
         layout.setRowStretch(10,6)
 
     def loadSettings(self):
-        with open("config\\joystick_control.cfg", "r") as file:
-            list = jsonpickle.decode(file.read())
-            for i in range(len(list)):
-                if i < len(self.masters):
-                    self.masters[i].restore(list[i])
+        try:
+            with open("config\\joystick_control.cfg", "r") as file:
+                list = jsonpickle.decode(file.read())
+                for i in range(len(list)):
+                    if i < len(self.masters):
+                        self.masters[i].restore(list[i])
+        except Exception as e:
+            print(e)
 
     def saveSettings(self):
-        with open("config\\joystick_control.cfg", "w") as file:
-            file.write(jsonpickle.encode([master.dump() for master in self.masters]))
+        try:
+            with open("config\\joystick_control.cfg", "w") as file:
+                file.write(jsonpickle.encode([master.dump() for master in self.masters]))
+        except Exception as e:
+            print(e)
 
     def start(self, activate=True):
         self.active = activate
