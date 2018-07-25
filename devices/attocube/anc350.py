@@ -2,7 +2,7 @@ from PyQt5 import QtWidgets,QtCore
 
 import ctypes as ct
 from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,handler
-from PyQt5 import QtWidgets,QtCore
+from PyQt5 import QtWidgets, QtCore, QtGui
 import time
 
 import os
@@ -150,7 +150,8 @@ class ANC350(DeviceOverZeroMQ):
     def createDock(self, parentWidget, menu=None):
         dock = QtWidgets.QDockWidget("Attocube ANC350", parentWidget)
         widget = QtWidgets.QWidget(parentWidget)
-        layout = QtWidgets.QHBoxLayout(parentWidget)
+        layout = QtWidgets.QVBoxLayout(parentWidget)
+        layout.setSpacing(2)
         widget.setLayout(layout)
 
         '''
@@ -178,14 +179,16 @@ class ANC350(DeviceOverZeroMQ):
         self.createListenerThread(self.updateSlot)
 
     def createWidgetForAxis(self, layout, axis):
+        hLayout = QtWidgets.QHBoxLayout(layout.parent())
         line = QtWidgets.QFrame()
         line.setFrameShape(QtWidgets.QFrame.VLine)
         line.setFrameShadow(QtWidgets.QFrame.Sunken)
         layout.addWidget(line)
         label = QtWidgets.QLabel("Axis " + str(axis))
-        layout.addWidget(label)
+        hLayout.addWidget(label)
         lineedit = QtWidgets.QLineEdit()
-        layout.addWidget(lineedit)
+        hLayout.addWidget(lineedit)
+        layout.addLayout(hLayout)
         return (lineedit,)
 
     def connectToDevice(self):
@@ -208,8 +211,8 @@ class ANC350(DeviceOverZeroMQ):
 
     def updateSlot(self, status):
         for axis in self.axis_widgets:
-            self.axis_widgets[axis][0].setText(str(status["axis%d_pos" % axis]))
-            print(status["axis%d_pos" % axis])
+            self.axis_widgets[axis][0].setText("%4.2f" % status["axis%d_pos" % axis])
+            #print(status["axis%d_pos" % axis])
             
             
         

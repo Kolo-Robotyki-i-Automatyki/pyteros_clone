@@ -101,7 +101,7 @@ if __name__ == '__main__':
 
         xbox = None
         try:
-            from devices.misc.xbox import XBoxPad,XBoxWorker
+            from devices.misc.xbox import XBoxPad, XBoxWorker
             xbox = XBoxPad()
             xbox.createDock(window, window.controlMenu)
             frontends.append(xbox)

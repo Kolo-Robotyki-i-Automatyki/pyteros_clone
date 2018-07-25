@@ -3,6 +3,7 @@
 """
 
 from PyQt5 import QtCore,QtWidgets,QtGui
+import jsonpickle
 import time
 
 dead_zone = 0.14
@@ -22,9 +23,20 @@ def _create_anc350_slave(anc350, axis):
 class Master():
     def __init__(self, axis_id, combo, checkInverted, editSpeed):
         self.axis_id = axis_id
+        self.comboRecentValid = ""
         self.combo = combo
         self.checkInverted = checkInverted
         self.editSpeed = editSpeed
+
+    def dump(self): #serialises parameters
+        #if self.combo.currentText() != "None":
+        self.comboRecentValid = self.combo.currentText()
+        return (self.comboRecentValid, self.checkInverted.isChecked(), self.editSpeed.text())
+
+    def restore(self, params):
+        self.comboRecentValid = params[0]
+        self.checkInverted.setChecked(params[1])
+        self.editSpeed.setText(params[2])
 
 class JoystickControlWidget(QtWidgets.QWidget):
     """ A widget for interactive control of APT motors using XBoxPad """
@@ -40,7 +52,8 @@ class JoystickControlWidget(QtWidgets.QWidget):
         self.timer.timeout.connect(self.timeout)
         self.active = False
         
-        self._createWidgets()        
+        self._createWidgets()
+        self.loadSettings()
         
     axes =  [("l_thumb_x", "Left stick horizontal"),
              ("l_thumb_y", "Left stick vertical"),
@@ -57,7 +70,8 @@ class JoystickControlWidget(QtWidgets.QWidget):
             master.combo.addItem("None")
             for s in self.slaves:
                 master.combo.addItem(s[0])
-            master.combo.setCurrentIndex(n)
+            #master.combo.setCurrentIndex(n)
+            master.combo.setCurrentText(master.comboRecentValid)
 
     
 
@@ -112,11 +126,23 @@ class JoystickControlWidget(QtWidgets.QWidget):
         self.startButton = QtWidgets.QPushButton("Start control")
         self.startButton.setCheckable(True)
         self.startButton.clicked.connect(self.start)
+        self.startButton.clicked.connect(self.saveSettings)
         buttonlayout.addWidget(self.startButton)
         layout.addLayout(buttonlayout, len(self.masters)+2,0,1,6)
         layout.setColumnStretch(5,6)
         layout.setRowStretch(10,6)
-        
+
+    def loadSettings(self):
+        with open("config\\joystick_control.cfg", "r") as file:
+            list = jsonpickle.decode(file.read())
+            for i in range(len(list)):
+                if i < len(self.masters):
+                    self.masters[i].restore(list[i])
+
+    def saveSettings(self):
+        with open("config\\joystick_control.cfg", "w") as file:
+            file.write(jsonpickle.encode([master.dump() for master in self.masters]))
+
     def start(self, activate=True):
         self.active = activate
         if activate:
