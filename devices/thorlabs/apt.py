@@ -82,6 +82,10 @@ class APTWorker(DeviceWorker):
         self.wait(mot)
         return mot.position
 
+    @handler("APT", "isStopped")
+    def isStopped(self):
+        mot = self.motors[serial]
+        return not mot.is_in_motion
 
 
 class APT(DeviceOverZeroMQ):

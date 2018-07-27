@@ -7,6 +7,7 @@ class Device:
     e.g. a positioner or a spectrometer """
     def __init__(self):
         self.priority = Device.Priority.Normal
+        active_devices.append(self)
         
     class Priority(Enum):
         Critical = 1 # Experiment is stopped if device fails
@@ -19,4 +20,4 @@ class Device:
 
 
 """ A list of devices """
-active_devices = {}
+active_devices = []

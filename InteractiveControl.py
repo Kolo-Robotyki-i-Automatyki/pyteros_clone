@@ -131,6 +131,12 @@ if __name__ == '__main__':
             w = map_widget.MapWidget(frontends)
             window.addPage(w, "Map")
         
+        if apt:
+            from src import tab_anisotropy
+            w = tab_anisotropy.AnisotropyTab(frontends)
+            w.refresh_combo()
+            window.addPage(w, "Anisotropy")
+        
         window.show()
         app.exec_()
                 
