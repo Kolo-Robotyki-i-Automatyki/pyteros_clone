@@ -2,19 +2,42 @@
 
 
 from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,handler
+from devices import Parameter
 from PyQt5 import QtWidgets,QtCore
 import time
 
 default_req_port = 7008
 default_pub_port = 7009
- 
+
+
+class APTParameter(Parameter):
+    def __init__(self, apt, motor_number):
+        self.apt = apt
+        self.motor_number = motor_number
+        
+    def name(self):
+        return 'APT motor, s/n: %d', self.motor_serial
+    
+    def value(self):
+        return self.apt.position(self.motor_serial)
+    
+    def move_to_target(self, target):
+        self.apt.moveTo(self.motor_serial, target)
+    
+    def move_continuous(self, rate):
+        self.apt.moveVelocity(self.motor_serial, rate)
+    
+    def is_moving(self):
+        return not self.apt.isStopped()
+
+
 class APTWorker(DeviceWorker):
     """ Class managing all Thorlabs APT  motor controllers """
     
     def __init__(self, req_port = default_req_port, pub_port = default_pub_port, **kwargs):
         super().__init__(req_port = req_port, pub_port = pub_port, **kwargs)
         self.motors = {}
-
+              
     def init_device(self):
         from . import apt_wrapper
         serials = [n for (t, n) in apt_wrapper.list_available_devices()]
@@ -83,7 +106,7 @@ class APTWorker(DeviceWorker):
         return mot.position
 
     @handler("APT", "isStopped")
-    def isStopped(self):
+    def isStopped(self, serial):
         mot = self.motors[serial]
         return not mot.is_in_motion
 
@@ -94,7 +117,6 @@ class APT(DeviceOverZeroMQ):
         self.createDelegatedMethods("APT")
         # custom initialization here
         self.widgets = {}
-
 
     def createDock(self, parentWidget, menu = None):
         """ Function for integration in GUI app.  """
@@ -141,5 +163,6 @@ class APT(DeviceOverZeroMQ):
                 self.appendRow(serial)
             motor_status = status["apt_%d" % serial]
             self.widgets[serial][0].display("%.1f" % motor_status["position"])
-
-    
+            
+    def get_parameters(self):
+        return [APTParameter(self, serial) for serial in self.devices]

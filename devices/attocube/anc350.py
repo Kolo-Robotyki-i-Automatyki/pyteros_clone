@@ -2,6 +2,7 @@ from PyQt5 import QtWidgets,QtCore
 
 import ctypes as ct
 from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,handler
+from devices import Parameter
 from PyQt5 import QtWidgets, QtCore, QtGui
 import time
 
@@ -12,6 +13,28 @@ attodll = ct.windll.LoadLibrary("hvpositionerv2.dll")
 
 default_req_port = 7006
 default_pub_port = 7007
+
+
+class AttocubeAxisParameter(Parameter):
+    def __init__(self, anc350, axis):
+        self.anc350 = anc350
+        self.axis = axis
+        
+    def name(self):
+        return "Attocube ANC350 axis: %d" % self.axis
+    
+    def value(self):
+        return self.anc350.axisPos(self.axis)
+    
+    def move_to_target(self, target):
+        self.anc350.ax(self.motor_serial, target)
+    
+    def move_continuous(self, rate):
+        self.anc350.moveVelocity(self.axis, int(rate*500))
+    
+    def is_moving(self):
+        raise NotImplementedError
+
 
 class ANC350Worker(DeviceWorker):
     def __init__(self, req_port=default_req_port, pub_port=default_pub_port, **kwargs):
