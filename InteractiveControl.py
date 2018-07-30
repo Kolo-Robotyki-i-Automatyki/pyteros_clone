@@ -7,6 +7,7 @@ Created on Sat May 26 09:54:02 2018
 
 from PyQt5 import Qt,QtCore,QtGui,QtWidgets
 import time
+import devices
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -86,56 +87,39 @@ if __name__ == '__main__':
         app = QtWidgets.QApplication(sys.argv)
         window = MainWindow()
         
-        frontends = []
+        devices.load_devices()
+        window.kernel_client.execute('import devices')
+        window.kernel_client.execute('devices.load_devices()')
+        window.kernel_client.execute('globals().update(devices.active_devices)')
+        window.kernel_client.execute('print(list(devices.active_devices))')
         
-        anc350 = None
-        try:
-            from devices.attocube.anc350 import ANC350
-            anc350 = ANC350()
-            anc350.createDock(window, window.controlMenu)
-            frontends.append(anc350)
-            window.kernel_client.execute("from devices.attocube.anc350 import ANC350")
-            window.kernel_client.execute("anc350 = ANC350()")
-        except Exception as e:
-            print("Failed to load driver for Attocube ANC350: ", str(e))
+        for _,device in devices.active_devices.items():
+            try:
+                device.createDock(window, window.controlMenu)
+            except:
+                pass
 
-        xbox = None
         try:
-            from devices.misc.xbox import XBoxPad, XBoxWorker
-            xbox = XBoxPad()
-            xbox.createDock(window, window.controlMenu)
-            frontends.append(xbox)
-            window.kernel_client.execute("from devices.misc.xbox import XBoxPad")
-            window.kernel_client.execute('xbox = XBoxPad()')
-        except Exception as e:
-            print("Failed to load driver for XBox pad: ", str(e))
-        
-        apt = None
-        try:
-            from devices.thorlabs.apt import APT
-            apt = APT()
-            apt.createDock(window, window.controlMenu)
-            frontends.append(apt)
-            window.kernel_client.execute("from devices.thorlabs.apt import APT")
-            window.kernel_client.execute("apt = APT()")
-        except Exception as e:
-            print("Failed to load driver for Thorlabs APT: ", str(e))
-
-        if xbox and apt and anc350: # TODO: upgrade joystick.control.py so it will work with only apt or only enc350
             from devices.misc import joystick_control
-            w = joystick_control.JoystickControlWidget(xbox, frontends)
+            w = joystick_control.JoystickControlWidget(devices.active_devices)
             window.addPage(w, "Pad control")
+        except:
+            pass
             
-        if apt:
+        try:
             from src import map_widget
-            w = map_widget.MapWidget(frontends)
+            w = map_widget.MapWidget(devices.active_devices)
             window.addPage(w, "Map")
+        except:
+            pass
         
-        if apt:
+        try:
             from src import tab_anisotropy
-            w = tab_anisotropy.AnisotropyTab(frontends)
+            w = tab_anisotropy.AnisotropyTab(devices.active_devices)
             w.refresh_combo()
             window.addPage(w, "Anisotropy")
+        except:
+            pass
         
         window.show()
         app.exec_()
