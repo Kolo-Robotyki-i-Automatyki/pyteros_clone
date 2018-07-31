@@ -13,10 +13,10 @@ default_pub_port = 7009
 class APTParameter(Parameter):
     def __init__(self, apt, motor_number):
         self.apt = apt
-        self.motor_number = motor_number
+        self.motor_serial = motor_number
         
     def name(self):
-        return 'APT motor, s/n: %d', self.motor_serial
+        return 'APT motor, s/n: %d' % self.motor_serial
     
     def value(self):
         return self.apt.position(self.motor_serial)
@@ -67,7 +67,7 @@ class APTWorker(DeviceWorker):
             self.wait(motor)
             d["apt_%d" % sn] = \
                 {"position": motor.position,
-                 "stopped":  motor.is_in_motion }
+                 "stopped":  not motor.is_in_motion }
         return d
 
     @handler("APT", "moveTo")
@@ -165,4 +165,4 @@ class APT(DeviceOverZeroMQ):
             self.widgets[serial][0].display("%.1f" % motor_status["position"])
             
     def get_parameters(self):
-        return [APTParameter(self, serial) for serial in self.devices]
+        return [APTParameter(self, serial) for serial in self.devices()]

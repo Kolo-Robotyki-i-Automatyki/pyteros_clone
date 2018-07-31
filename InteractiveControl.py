@@ -82,7 +82,7 @@ class MainWindow(QtWidgets.QMainWindow):
     
 
 if __name__ == '__main__':
-    import sys
+    import sys,traceback
     def run_app():
         app = QtWidgets.QApplication(sys.argv)
         window = MainWindow()
@@ -96,31 +96,31 @@ if __name__ == '__main__':
         for _,device in devices.active_devices.items():
             try:
                 device.createDock(window, window.controlMenu)
-            except:
-                pass
+            except Exception as e:
+                traceback.print_exc(file=sys.stdout)
 
         try:
             from devices.misc import joystick_control
             w = joystick_control.JoystickControlWidget(devices.active_devices)
             window.addPage(w, "Pad control")
-        except:
-            pass
+        except Exception as e:
+            traceback.print_exc(file=sys.stdout)
             
         try:
             from src import map_widget
             w = map_widget.MapWidget(devices.active_devices)
             window.addPage(w, "Map")
-        except:
-            pass
+        except Exception as e:
+            traceback.print_exc(file=sys.stdout)
         
         try:
             from src import tab_anisotropy
-            w = tab_anisotropy.AnisotropyTab(devices.active_devices)
-            w.refresh_combo()
+            w = tab_anisotropy.AnisotropyTab()
             window.addPage(w, "Anisotropy")
-        except:
-            pass
-        
+        except Exception as e:
+            traceback.print_exc(file=sys.stdout)
+                
+                
         window.show()
         app.exec_()
                 

@@ -16,6 +16,7 @@ context = zmq.Context()
 
 class DeviceOverZeroMQ(device.Device):
     def __init__(self, req_port, pub_port=None, host="localhost"):
+        self.thread = None
         self.channel = "tcp://"+host+":"+str(req_port)
         self.client = context.socket(zmq.REQ)
         self.client.connect(self.channel)
@@ -82,13 +83,13 @@ class DeviceOverZeroMQ(device.Device):
         if not self.pub_channel:
             print("Error: no PUB port given")
             return
-        self.thread = QtCore.QThread()
-        self.zeromq_listener = DeviceOverZeroMQ.ZeroMQ_Listener(self.pub_channel)
-        self.zeromq_listener.moveToThread(self.thread)
-        self.thread.started.connect(self.zeromq_listener.loop)
+        if not self.thread:
+            self.thread = QtCore.QThread()
+            self.zeromq_listener = DeviceOverZeroMQ.ZeroMQ_Listener(self.pub_channel)
+            self.zeromq_listener.moveToThread(self.thread)
+            self.thread.started.connect(self.zeromq_listener.loop)
+            QtCore.QTimer.singleShot(0, self.thread.start)
         self.zeromq_listener.message.connect(updateSlot)
-        QtCore.QTimer.singleShot(0, self.thread.start)
-        
         
         
 from multiprocessing import Process

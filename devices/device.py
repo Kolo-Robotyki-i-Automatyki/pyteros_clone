@@ -45,10 +45,6 @@ class Parameter:
 """ A dictionary of loaded devices. Key is the interpreter name of the object """
 active_devices = {}
 
-""" Dictionary of supported devices. Each implemented device can register itself
-in this dictionary to enable automatic loading (see function load_devices) """
-supported_devices = {}
-
 def load_devices():
     import importlib
     import sys,traceback

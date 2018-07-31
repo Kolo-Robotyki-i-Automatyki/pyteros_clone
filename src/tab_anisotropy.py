@@ -2,8 +2,9 @@
 import scipy as sp
 from PyQt5 import QtWidgets,QtGui,QtCore
 import time
+import devices
 from devices.thorlabs import apt
-from collections import namedtuple
+
 
 class MeasurementThread(QtCore.QThread):
     measurement_progress = QtCore.pyqtSignal(int)
@@ -19,12 +20,11 @@ class MeasurementThread(QtCore.QThread):
         """ Call this function periodically to enable user to pause or cancel
         the measurement """
         if self.paused:
-            print("Pausing...")
+            self.log("Paused")
             while self.paused:
                 time.sleep(0.5)
                 if self.cancelled:
                     return
-            print("Unpaused")
         else:
             if self.cancelled:
                 raise Exception("Thread cancelled")
@@ -40,6 +40,7 @@ class MeasurementThread(QtCore.QThread):
     def log(self, msg):
         """ Call this function instead of print """
         self.measurement_info.emit(str(msg))
+        print(msg)
     
     def run(self):
         """ You should override this method in subclass """
@@ -152,9 +153,18 @@ class AnisotropyThread(MeasurementThread):
     
 
 class AnisotropyTab(MeasurementTab):
-    def __init__(self, device_list):
+    def __init__(self):
         super().__init__(thread_class=AnisotropyThread)
-        self.device_list = device_list
+        self.__known_stages = set()
+        
+        found = False
+        for _,device in devices.active_devices.items():
+            if isinstance(device, apt.APT):
+                device.createListenerThread(self.__monitor_for_new_apt_stages)
+                found = True
+        if not found:
+            raise Exception("No APT found")
+                
         
     def setup_additional_widgets(self, layout):
         formlayout = QtWidgets.QFormLayout()
@@ -204,18 +214,23 @@ class AnisotropyTab(MeasurementTab):
         self.steps_input.setEnabled(True)
         self.axis_input.setEnabled(True)
 
-    def refresh_combo(self):
+    def __refresh_combo(self):
         current_axis = self.axis_input.currentText()
-        Slave = namedtuple('Slave', ['name', 'moveTo', 'isStopped', 'getPosition'])
-        def make_slave(apt_device):
-            return Slave(apt_device.name, apt_device.moveTo, 
-                         apt_device.isStopped, apt_device.position)
-        slave_list = [make_slave(d) for d in self.device_list if isinstance(d, apt.APT)]
+        
+        param_list = []
+        for _,device in devices.active_devices.items():
+            if isinstance(device, apt.APT):
+                param_list.extend(device.get_parameters())
         current_axis = self.axis_input.currentText()
-        for s in slave_list:
-            self.axis_input.addItem(s.name(), s)
+        for param in param_list:
+            self.axis_input.addItem(param.name(), param)
         self.axis_input.setCurrentText(current_axis)
         
+    def __monitor_for_new_apt_stages(self, msg):
+        stages = set([name for name in msg if name.startswith('apt_')])
+        if not stages.issubset(self.__known_stages):
+            self.__known_stages = self.__known_stages | stages
+            self.__refresh_combo()
     
 if __name__ == '__main__':
     import sys
