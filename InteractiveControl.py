@@ -117,6 +117,8 @@ if __name__ == '__main__':
             from src import tab_anisotropy
             w = tab_anisotropy.AnisotropyTab()
             window.addPage(w, "Anisotropy")
+        except tab_anisotropy.NoRequiredDevicesError:
+            pass
         except Exception as e:
             traceback.print_exc(file=sys.stdout)
                 
