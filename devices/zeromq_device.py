@@ -138,12 +138,9 @@ class DeviceWorker(Process):
         self.refresh_rate = refresh_rate
         super().__init__()
 
+    @handler("DeviceWorker", "status")
     def status(self):
         return {}
-    
-    @handler("DeviceWorker", "status_to_save")
-    def status_to_save(self):
-        return self.status()
 
     def init_device(self):
         pass
@@ -178,8 +175,6 @@ class DeviceWorker(Process):
                 notifier.send_multipart([b"status", msg])
                 continue
             
-            #print("Raw request:", request)
-            #print(request)
             try:
                 f = delegated_methods_db[(request[1],request[0])]
                 args = request[2]

@@ -19,6 +19,9 @@ class Device:
     
     def name(self):
         return type(self).__name__
+    
+    def status_to_save(self):
+        return {}
 
 
 class Parameter:

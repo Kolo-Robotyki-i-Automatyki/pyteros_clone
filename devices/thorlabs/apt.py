@@ -133,7 +133,6 @@ class APT(DeviceOverZeroMQ):
         self.createListenerThread(self.updateSlot)
 
 
-
     def appendRow(self, serial):
         hlayout = QtWidgets.QHBoxLayout()
         label = QtWidgets.QLabel("s/n: %d" % serial)

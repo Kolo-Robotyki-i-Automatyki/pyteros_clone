@@ -99,10 +99,14 @@ if __name__ == '__main__':
             except Exception as e:
                 traceback.print_exc(file=sys.stdout)
 
+        from src.measurement_tab import NoRequiredDevicesError
+
         try:
             from devices.misc import joystick_control
             w = joystick_control.JoystickControlWidget(devices.active_devices)
             window.addPage(w, "Pad control")
+        except NoRequiredDevicesError:
+            pass
         except Exception as e:
             traceback.print_exc(file=sys.stdout)
             
@@ -110,6 +114,8 @@ if __name__ == '__main__':
             from src import map_widget
             w = map_widget.MapWidget(devices.active_devices)
             window.addPage(w, "Map")
+        except NoRequiredDevicesError:
+            pass
         except Exception as e:
             traceback.print_exc(file=sys.stdout)
         
@@ -117,7 +123,7 @@ if __name__ == '__main__':
             from src import tab_anisotropy
             w = tab_anisotropy.AnisotropyTab()
             window.addPage(w, "Anisotropy")
-        except tab_anisotropy.NoRequiredDevicesError:
+        except NoRequiredDevicesError:
             pass
         except Exception as e:
             traceback.print_exc(file=sys.stdout)

@@ -4,7 +4,7 @@ from PyQt5 import QtWidgets
 import devices
 from devices.thorlabs import apt
 
-from measurement_tab import MeasurementThread, MeasurementTab, NoRequiredDevicesError        
+from .measurement_tab import MeasurementThread, MeasurementTab, NoRequiredDevicesError        
 
 
 from numpy import linspace
