@@ -101,7 +101,6 @@ import time
 import threading
 
 def reminderFunc(context,req_channel,rate=0.1):
-    print("Starting thread")
     reminder = context.socket(zmq.REQ)
     reminder.connect(req_channel)
     try:
@@ -112,7 +111,6 @@ def reminderFunc(context,req_channel,rate=0.1):
     except:
         reminder.close()
         raise
-    print("Thread finishing")
 
 
 
