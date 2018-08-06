@@ -4,6 +4,7 @@
 
 from PyQt5 import QtCore,QtWidgets,QtGui
 import jsonpickle
+from ..misc.xbox import XBoxPad
 import time
 
 dead_zone = 0.14
@@ -41,12 +42,15 @@ class Master():
 class JoystickControlWidget(QtWidgets.QWidget):
     """ A widget for interactive control of APT motors using XBoxPad """
     
-    def __init__(self, xbox, slave_devices=[], parent=None):
+    def __init__(self, slave_devices=[], parent=None):
         super().__init__(parent)
-        self.xbox = xbox
         self.device_list = slave_devices
-        self.slaves = []
-        
+        if "xbox" in self.device_list:
+            self.xbox = self.device_list["xbox"]
+        else:
+            from src.measurement_tab import NoRequiredDevicesError
+            raise NoRequiredDevicesError("No XBoxPad found")
+
         self.timer = QtCore.QTimer()
         self.timer.setSingleShot(5000)
         self.timer.timeout.connect(self.timeout)
@@ -82,15 +86,17 @@ class JoystickControlWidget(QtWidgets.QWidget):
 
         try:
             from ..thorlabs.apt import APT
-            for apt in filter(lambda d: isinstance(d, APT), self.device_list):
-                for serial in apt.devices():
+            if "apt" in self.device_list:
+                apt = self.device_list["apt"]
+                for seriak in apt.devices():
                     self.slaves.append(_create_apt_slave(apt, serial))
         except Exception as e:
             print(e)
 
         try:
             from ..attocube.anc350 import ANC350
-            for anc350 in filter(lambda d: isinstance(d, ANC350), self.device_list):
+            if "anc350" in self.device_list:
+                anc350 = self.device_list["anc350"]
                 for axis in anc350.axes():
                     self.slaves.append(_create_anc350_slave(anc350, axis))
         except Exception as e:
