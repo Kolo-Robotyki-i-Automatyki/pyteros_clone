@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import scipy as sp
+from scipy import optimize
 from PyQt5 import QtWidgets,QtGui,QtCore,QtSvg
+
 
 
 class ZoomableGraphicsView(QtWidgets.QGraphicsView):
@@ -52,6 +54,101 @@ def _create_anc350_poll(anc350, axis):
     def f():
         return anc350.axisPos(axis)
     return ("Attocube ANC350 axis: %d" % axis, f)
+
+
+class AnchorItem(QtWidgets.QGraphicsItemGroup):
+    def __init__(self, parent, real_pos):
+        super().__init__(parent)
+        self.setEnabled(True)
+        self.setActive(True)
+        circle = QtWidgets.QGraphicsEllipseItem(self)
+        circle.setRect(-5,-5,10,10)
+        circle.setBrush(QtGui.QBrush(QtCore.Qt.yellow))
+        circle.setFlag(QtWidgets.QGraphicsItem.ItemIgnoresTransformations, True)
+        self.real_pos = real_pos
+
+    def contextMenuEvent(self, event):
+        event.accept()
+        menu = QtWidgets.QMenu()
+        removeAction = menu.addAction("Remove anchor point")
+        selectedAction = menu.exec(event.screenPos())
+        if selectedAction == removeAction:
+            self.parentItem().remove_anchor(self)
+
+
+class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
+    def __init__(self, pixmap):
+        super().__init__(pixmap)       
+        self.setEnabled(True)
+        self.setActive(True)
+        self.setAcceptedMouseButtons(QtCore.Qt.RightButton)
+        self.current_coordinates = (0, 0)
+        self.anchor_items = []
+    
+    def contextMenuEvent(self, event):
+        menu = QtWidgets.QMenu()
+        add_anchor_action = menu.addAction("Anchor this point")
+        remove_action = menu.addAction("Remove map")
+        selected_action = menu.exec(event.screenPos())
+        if selected_action == remove_action:
+            pass
+        elif selected_action == add_anchor_action:    
+            dialog = QtWidgets.QDialog()
+            dialog.setWindowTitle("Anchor this point")
+            layout = QtWidgets.QFormLayout()
+            dialog.setLayout(layout)
+            x_input = QtWidgets.QLineEdit("0.") #TODO: z current_coordinates
+            layout.addRow("X coordinate", x_input)
+            y_input = QtWidgets.QLineEdit("0.") #TODO: z current_coordinates
+            layout.addRow("Y coordinate", y_input)
+            buttonBox = QtWidgets.QDialogButtonBox()
+            buttonBox.setOrientation(QtCore.Qt.Horizontal)
+            buttonBox.setStandardButtons(QtWidgets.QDialogButtonBox.Cancel|QtWidgets.QDialogButtonBox.Ok)
+            buttonBox.accepted.connect(dialog.accept)
+            buttonBox.rejected.connect(dialog.reject)
+            layout.addRow(buttonBox)
+            
+            #d.setWindowModality(Qt.ApplicationModal)
+            dialog.show()
+            if dialog.exec_():
+                real_pos = (float(x_input.text()), float(y_input.text()))
+                anchor = AnchorItem(self, real_pos)
+                pos = self.mapFromScene(event.scenePos())
+                anchor.setPos(pos)
+                self.anchor_items.append(anchor)
+        
+    def remove_anchor(self, anchor_item):
+        self.anchor_items.remove(anchor_item)
+        anchor_item.setParentItem(None)
+        anchor_item.scene().removeItem(anchor_item)
+        
+    def find_best_transform(self):
+        """ Use least squares method to find the best transform which fits the anchor points"""
+        if len(self.anchor_items) < 1:
+            return
+        data = [(a.pos(),a.real_pos) for a in self.anchor_items]
+        def build_transform(params):
+            transform = QtGui.QTransform()
+            if len(params >= 2):
+                transform.translate(params[0], params[1])
+            if len(params >= 3):
+                transform.rotate(params[3])
+            if len(params >= 5):
+                transform.scale(params[4],params[5])
+            return transform
+        
+        def fitfunc(params):
+            transform = build_transform(params)
+            chi2 = 0.
+            for point0,point1 in data:
+                diff = point1 - transform.map(point0)
+                chi2 += diff.x()**2 + diff.y()**2
+            return chi2
+        
+        best = optimize.fmin(fitfunc, [1,1])
+        print(best)
+        self.setTransform(build_transform(best))
+
 
 
 class MapWidget(QtWidgets.QWidget):
@@ -174,7 +271,7 @@ class MapWidget(QtWidgets.QWidget):
             else:
                 print("case2")
                 pixmap = QtGui.QPixmap(fileName)
-                self.bg_item = QtWidgets.QGraphicsPixmapItem(pixmap)
+                self.bg_item = SampleImageItem(pixmap)
             self.scene.addItem(self.bg_item)
             self.updatePixmap()
         except Exception as e:
