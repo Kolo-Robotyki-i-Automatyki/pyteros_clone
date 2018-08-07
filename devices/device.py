@@ -61,7 +61,7 @@ def load_devices():
             kwargs.pop('class')
             DeviceClass = getattr(importlib.import_module('devices.'+module_name), class_name)
             instance = DeviceClass(**kwargs)
-            active_devices[section] = instance #TODO do we want only one instance of each type?
+            active_devices[section] = instance
         except Exception as e:
             print("Loading device %s failed." % section)
             traceback.print_exc(file=sys.stdout)

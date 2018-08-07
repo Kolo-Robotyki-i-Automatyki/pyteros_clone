@@ -9,17 +9,17 @@ import time
 
 dead_zone = 0.14
 
-def _create_apt_slave(apt, serial):
+def _create_apt_slave(apt, name, serial):
     """Creates a pair of a name and a function to move a stage """
     func = lambda velocity : apt.moveVelocity(serial, velocity)
-    return ("APT s/n: %d" % serial, func)
+    return ("APT %s, s/n: %d" % (name, serial), func)
 
-def _create_anc350_slave(anc350, axis):
+def _create_anc350_slave(anc350, name, axis):
     """Creates a pair of a name and a function to move a stage """
     def f(velocity):
         anc350.moveVelocity(axis, int(velocity))
     #func = lambda velocity : anc350.moveVelocity(axis, velocity)
-    return ("Attocube ANC350 axis: %d" % axis, f)
+    return ("Attocube %s axis: %d" % (name, axis), f)
 
 class Master():
     def __init__(self, axis_id, combo, checkInverted, editSpeed):
@@ -45,9 +45,14 @@ class JoystickControlWidget(QtWidgets.QWidget):
     def __init__(self, slave_devices=[], parent=None):
         super().__init__(parent)
         self.device_list = slave_devices
-        if "xbox" in self.device_list:
-            self.xbox = self.device_list["xbox"]
-        else:
+        self.xbox = None
+        try:
+            for xboxname, xbox in {k: v for k, v in self.device_list.items() if isinstance(v, XBoxPad)}.items():
+                self.xbox = xbox
+                break
+        except Exception as e:
+            print(e)
+        if self.xbox == None:
             from src.measurement_tab import NoRequiredDevicesError
             raise NoRequiredDevicesError("No XBoxPad found")
 
@@ -86,19 +91,17 @@ class JoystickControlWidget(QtWidgets.QWidget):
 
         try:
             from ..thorlabs.apt import APT
-            if "apt" in self.device_list:
-                apt = self.device_list["apt"]
-                for seriak in apt.devices():
-                    self.slaves.append(_create_apt_slave(apt, serial))
+            for name, apt in {k: v for k, v in self.device_list.items() if isinstance(v, APT)}.items():
+                for serial in apt.devices():
+                    self.slaves.append(_create_apt_slave(apt, name, serial))
         except Exception as e:
             print(e)
 
         try:
             from ..attocube.anc350 import ANC350
-            if "anc350" in self.device_list:
-                anc350 = self.device_list["anc350"]
+            for name, anc350 in {k: v for k, v in self.device_list.items() if isinstance(v, ANC350)}.items():
                 for axis in anc350.axes():
-                    self.slaves.append(_create_anc350_slave(anc350, axis))
+                    self.slaves.append(_create_anc350_slave(anc350, name, axis))
         except Exception as e:
             print(e)
 
