@@ -4,7 +4,6 @@ from scipy import optimize
 from PyQt5 import QtWidgets,QtGui,QtCore,QtSvg
 
 
-
 class ZoomableGraphicsView(QtWidgets.QGraphicsView):
     def __init__ (self, parent=None):
         super().__init__ (parent)
@@ -77,14 +76,31 @@ class AnchorItem(QtWidgets.QGraphicsItemGroup):
 
 
 class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
-    def __init__(self, pixmap):
-        super().__init__(pixmap)       
-        self.setEnabled(True)
-        self.setActive(True)
-        self.setAcceptedMouseButtons(QtCore.Qt.RightButton)
-        self.current_coordinates = (0, 0)
+    def __init__(self, parent):
+        super().__init__()
+
+        self.parent = parent
+        self.scene = self.parent.scene
+        self.loaded = False
         self.anchor_items = []
-    
+
+        self.hlayout = QtWidgets.QHBoxLayout()
+        button = QtWidgets.QPushButton("Load image")
+        self.hlayout.addWidget(button)
+        button.clicked.connect(self.loadImage)
+
+        sides = {"x": -100, "y": 100, "rotation": 0, "width": 100, "aspect ratio": 1.5}
+        self.edits = {}
+        for s in sides:
+            self.hlayout.addWidget(QtWidgets.QLabel(s + ":"))
+            edit = QtWidgets.QLineEdit(str(sides[s]))
+            edit.setValidator(QtGui.QDoubleValidator())
+            self.hlayout.addWidget(edit)
+            self.hlayout.addSpacing(20)
+            edit.editingFinished.connect(self.updatePixmap)
+            self.edits[s] = edit
+        self.hlayout.addStretch(5)
+
     def contextMenuEvent(self, event):
         menu = QtWidgets.QMenu()
         add_anchor_action = menu.addAction("Anchor this point")
@@ -116,7 +132,51 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
                 pos = self.mapFromScene(event.scenePos())
                 anchor.setPos(pos)
                 self.anchor_items.append(anchor)
-        
+
+
+
+    def loadImage(self):
+        self.pixmap = QtGui.QPixmap()
+        fileName = QtWidgets.QFileDialog.getOpenFileName(self.parent, "Load sample image",
+                                                         "", "Image Files (*.png *.jpg *.bmp *.svg)")
+        fileName = fileName[0]
+        if not fileName:
+            return
+
+        if self.loaded:
+            self.scene.removeItem(self)
+            del(self.pixmap)
+            self.loaded = False
+        try:
+            if fileName.lower().endswith("svg"):
+                self.bg_item = QtSvg.QGraphicsSvgItem(fileName)
+            else:
+                print("case2")
+                pixmap = QtGui.QPixmap(fileName)
+                self.setPixmap(pixmap)
+            self.scene.addItem(self)
+            self.setEnabled(True)
+            self.setActive(True)
+            self.loaded = True
+            self.setAcceptedMouseButtons(QtCore.Qt.RightButton)
+            self.current_coordinates = (0, 0)
+            self.updatePixmap()
+        except Exception as e:
+            print("Error: ", str(e))
+
+    def updatePixmap(self):
+        if self.loaded:
+            x = float(self.edits["x"].text())
+            y = float(self.edits["y"].text())
+            w = float(self.edits["width"].text())
+            h = float(self.edits["width"].text()) / float(self.edits["aspect ratio"].text())
+            self.resetTransform()
+            rect = self.boundingRect()
+            translation = QtGui.QTransform.fromTranslate(x, y)
+            self.setTransform(translation)
+            scaling = QtGui.QTransform.fromScale(w/rect.width(), h/rect.height())
+            self.setTransform(scaling, True)
+
     def remove_anchor(self, anchor_item):
         self.anchor_items.remove(anchor_item)
         anchor_item.setParentItem(None)
@@ -186,23 +246,10 @@ class MapWidget(QtWidgets.QWidget):
         self.show()
         
         self.pixmapItem = None
-        hlayout2 = QtWidgets.QHBoxLayout()
-        button = QtWidgets.QPushButton("Load image")
-        hlayout2.addWidget(button)
-        button.clicked.connect(self.loadImage)
-        
-        sides = {"x": -100, "y": 100, "width": -100, "height": 100}
-        self.edits = {}
-        for s in sides:
-            hlayout2.addWidget(QtWidgets.QLabel(s +":"))
-            edit = QtWidgets.QLineEdit( str(sides[s]) )
-            edit.setValidator(QtGui.QDoubleValidator())
-            hlayout2.addWidget(edit)
-            hlayout2.addSpacing(20)
-            edit.editingFinished.connect(self.updatePixmap)
-            self.edits[s] = edit
-        hlayout2.addStretch(5) 
-        layout.addLayout(hlayout2)
+
+        self.setupScene()
+
+        layout.addLayout(self.bg_item.hlayout)
 
         hlayout3 = QtWidgets.QHBoxLayout()
         self.combos = {}
@@ -228,7 +275,6 @@ class MapWidget(QtWidgets.QWidget):
         buttonlayout.addStretch(1)
         layout.addLayout(buttonlayout)
 
-        self.setupScene()
 
 
     def setupScene(self):
@@ -250,47 +296,9 @@ class MapWidget(QtWidgets.QWidget):
             
         self.scene.mouseMoveEvent = onMouseMoveEvent
         
-        self.bg_item = None
+        self.bg_item = SampleImageItem(self)
         
-        pixmap = QtGui.QPixmap()
-        
-    def loadImage(self):
-        fileName = QtWidgets.QFileDialog.getOpenFileName(self, "Load sample image", 
-                                    "", "Image Files (*.png *.jpg *.bmp *.svg)")
-        fileName = fileName[0]
-        if not fileName:
-            return
 
-        if self.bg_item:
-            self.scene.removeItem(self.bg_item)
-            del(self.bg_item)
-            self.bg_item = None
-        try:
-            if fileName.lower().endswith("svg"):
-                self.bg_item = QtSvg.QGraphicsSvgItem(fileName)
-            else:
-                print("case2")
-                pixmap = QtGui.QPixmap(fileName)
-                self.bg_item = SampleImageItem(pixmap)
-            self.scene.addItem(self.bg_item)
-            self.updatePixmap()
-        except Exception as e:
-            print("Error: ", str(e))
-            self.bg_item = None
-    
-    def updatePixmap(self):
-        if self.bg_item:
-            x = float(self.edits["x"].text())
-            y = float(self.edits["y"].text())
-            w = float(self.edits["width"].text())
-            h = float(self.edits["height"].text())
-            self.bg_item.resetTransform()
-            rect = self.bg_item.boundingRect()
-            translation = QtGui.QTransform.fromTranslate(x, y)
-            self.bg_item.setTransform(translation)
-            scaling = QtGui.QTransform.fromScale(w/rect.width(), h/rect.height())
-            self.bg_item.setTransform(scaling, True)
-            
     def start(self, activate=True):
         self.active = activate
             
@@ -330,7 +338,7 @@ class MapWidget(QtWidgets.QWidget):
                 if combo.currentText() == "None":
                     return
                 device_id = combo.currentIndex() - 1
-                print(self.pools[device_id][1])
+                #print(self.pools[device_id][0])
                 if direction == "x":
                     self.cursor.setX(self.pools[device_id][1]())
                 else:
