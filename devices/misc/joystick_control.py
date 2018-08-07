@@ -106,8 +106,7 @@ class JoystickControlWidget(QtWidgets.QWidget):
             print(e)
 
         self.refreshCombos()
-                
-        
+
     def _createWidgets(self):
         layout = QtWidgets.QGridLayout()
         self.setLayout(layout)

@@ -44,16 +44,16 @@ class ZoomableGraphicsView(QtWidgets.QGraphicsView):
 
 
 
-def _create_apt_poll(apt, serial):
+def _create_apt_poll(apt, name, serial):
     """Creates a pair of a name and a function to get stage position """
     func = lambda: apt.position(serial)
-    return ("APT s/n: %d" % serial, func)
+    return ("APT %s, s/n: %d" % (name, serial), func)
 
-def _create_anc350_poll(anc350, axis):
+def _create_anc350_poll(anc350, name, axis):
     """Creates a pair of a name and a function to get stage position """
     def f():
         return anc350.axisPos(axis)
-    return ("Attocube ANC350 axis: %d" % axis, f)
+    return ("Attocube %s axis: %d" % (name, axis), f)
 
 
 class AnchorItem(QtWidgets.QGraphicsItemGroup):
@@ -298,22 +298,20 @@ class MapWidget(QtWidgets.QWidget):
         self.start(False)
         self.pools = []
         self.slaves = []
-        
+
         try:
             from devices.thorlabs.apt import APT
-            for apt in filter(lambda d: isinstance(d, APT), self.device_list):
+            for name, apt in {k: v for k, v in self.device_list.items() if isinstance(v, APT)}.items():
                 for serial in apt.devices():
-                    self.pools.append( _create_apt_poll(apt, serial) )
-                    #self.slaves.append( _create_apt_slave(apt, serial) )
+                    self.pools.append( _create_apt_poll(apt, name, serial) )
         except Exception as e:
             print(e)
 
         try:
             from devices.attocube.anc350 import ANC350
-            for anc350 in filter(lambda d: isinstance(d, ANC350), self.device_list):
+            for name, anc350 in {k: v for k, v in self.device_list.items() if isinstance(v, ANC350)}.items():
                 for axis in anc350.axes():
-                    self.pools.append(_create_anc350_poll(anc350, axis))
-                    #self.slaves.append(_create_anc350_slave(anc350, axis))
+                    self.pools.append(_create_anc350_poll(anc350, name, axis))
         except Exception as e:
             print(e)
         
