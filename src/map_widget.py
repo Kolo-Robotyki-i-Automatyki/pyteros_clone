@@ -116,7 +116,7 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
 
             col += 1
 
-        for i in ["x", "y", "width"]:
+        for i in ["x", "y", "width", "rotation"]:
             self.checks[i].setChecked(1)
 
 
@@ -160,6 +160,9 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
         fileName = QtWidgets.QFileDialog.getOpenFileName(self.parent, "Load sample image",
                                                          "", "Image Files (*.png *.jpg *.bmp *.svg)")
         fileName = fileName[0]
+
+        self.config_filename = fileName + ".cfg"
+
         if not fileName:
             return
 
@@ -182,9 +185,9 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
             self.loaded = True
             self.setAcceptedMouseButtons(QtCore.Qt.RightButton)
             self.current_coordinates = (0, 0)
-            self.updatePixmap()
         except Exception as e:
             print("Error: ", str(e))
+        self.load_settings()
         self.updatePixmap()
 
     def updatePixmap(self):
@@ -196,6 +199,37 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
             transform.scale(transform_params[3], transform_params[3] / transform_params[4] / (float(self.w)/float(self.h)))
             transform.scale(1 / self.w, 1 / self.h)
             self.setTransform(transform)
+            self.save_settings()
+
+    def load_settings(self):
+        try:
+            with open(self.config_filename, "r") as file:
+                transform_params, anchors = jsonpickle.decode(file.read())
+
+                for anchor in self.anchor_items:
+                    self.remove_anchor(anchor)
+                for a in anchors:
+                    real_pos, pos = a
+                    anchor = AnchorItem(self, real_pos)
+                    anchor.real_pos = a[0]
+                    anchor.setPos(QtCore.QPointF(pos[0], pos[1]))
+                    self.anchor_items.append(anchor)
+
+                keys = list(self.sides)
+                for i in range(len(keys)):
+                    self.edits[keys[i]].setText(str(transform_params[i]))
+        except Exception as e:
+            print(e)
+
+    def save_settings(self):
+        try:
+            with open(self.config_filename, "w") as file:
+                anchors = [(a.real_pos, (a.pos().x(), a.pos().y())) for a in self.anchor_items]
+                transform_params = [float(self.edits[key].text()) for key in list(self.sides)]
+                file.write(jsonpickle.encode([transform_params, anchors]))
+        except Exception as e:
+            print(e)
+
 
     def remove_anchor(self, anchor_item):
         self.anchor_items.remove(anchor_item)
@@ -245,7 +279,7 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
         update_transform_params(best)
         for i in range(len(keys)):
             self.edits[keys[i]].setText(str(transform_params[i]))
-            self.updatePixmap()
+        self.updatePixmap()
 
 
 
