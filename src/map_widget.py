@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 import scipy as sp
 from scipy import optimize
+import math
 from PyQt5 import QtWidgets,QtGui,QtCore,QtSvg
+from collections import OrderedDict
 
 
 class ZoomableGraphicsView(QtWidgets.QGraphicsView):
@@ -84,22 +86,46 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
         self.loaded = False
         self.anchor_items = []
 
-        self.hlayout = QtWidgets.QHBoxLayout()
-        button = QtWidgets.QPushButton("Load image")
-        self.hlayout.addWidget(button)
-        button.clicked.connect(self.loadImage)
+        self.hlayout = QtWidgets.QGridLayout()
+        button_load = QtWidgets.QPushButton("Load image")
+        self.hlayout.addWidget(button_load, 0, 0)
+        button_load.clicked.connect(self.loadImage)
 
-        sides = {"x": -100, "y": 100, "rotation": 0, "width": 100, "aspect ratio": 1.5}
-        self.edits = {}
-        for s in sides:
-            self.hlayout.addWidget(QtWidgets.QLabel(s + ":"))
-            edit = QtWidgets.QLineEdit(str(sides[s]))
+        button_fit = QtWidgets.QPushButton("Fit Transform")
+        self.hlayout.addWidget(button_fit, 1, 0)
+        button_fit.clicked.connect(self.find_best_transform)
+
+        self.sides = OrderedDict([("x", -100), ("y", 100), ("rotation", 0), ("width", 100), ("aspect ratio", 1)])
+        self.edits = OrderedDict([])
+        self.checks = OrderedDict([])
+        col = 1
+        for s in self.sides:
+            self.hlayout.addWidget(QtWidgets.QLabel(s + ":"), 0, 2 * col - 1, 1 ,2)
+
+            edit = QtWidgets.QLineEdit(str(self.sides[s]))
             edit.setValidator(QtGui.QDoubleValidator())
-            self.hlayout.addWidget(edit)
-            self.hlayout.addSpacing(20)
+            self.hlayout.addWidget(edit, 1, 2 * col-1)
+            edit.setFixedWidth(120)
             edit.editingFinished.connect(self.updatePixmap)
             self.edits[s] = edit
-        self.hlayout.addStretch(5)
+
+            check = QtWidgets.QCheckBox("Manual")
+            check.setChecked(1)
+            self.hlayout.addWidget(check, 1, 2 * col)
+            self.checks[s] = check
+
+            col += 1
+
+        def editLocker(s):
+            def f(checked):
+                self.edits[s].setEnabled(checked)
+            return f
+
+        for s in self.sides:
+            self.checks[s].stateChanged.connect(editLocker(s))
+
+    def refreshLockedEdit(self, edit, checked):
+        edit.setEnabled(checked)
 
     def contextMenuEvent(self, event):
         menu = QtWidgets.QMenu()
@@ -113,9 +139,9 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
             dialog.setWindowTitle("Anchor this point")
             layout = QtWidgets.QFormLayout()
             dialog.setLayout(layout)
-            x_input = QtWidgets.QLineEdit("0.") #TODO: z current_coordinates
+            x_input = QtWidgets.QLineEdit(str(self.parent.cursor.x())) #TODO: z current_coordinates
             layout.addRow("X coordinate", x_input)
-            y_input = QtWidgets.QLineEdit("0.") #TODO: z current_coordinates
+            y_input = QtWidgets.QLineEdit(str(self.parent.cursor.y())) #TODO: z current_coordinates
             layout.addRow("Y coordinate", y_input)
             buttonBox = QtWidgets.QDialogButtonBox()
             buttonBox.setOrientation(QtCore.Qt.Horizontal)
@@ -153,6 +179,8 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
             else:
                 print("case2")
                 pixmap = QtGui.QPixmap(fileName)
+                self.w = pixmap.width()
+                self.h = pixmap.height()
                 self.setPixmap(pixmap)
             self.scene.addItem(self)
             self.setEnabled(True)
@@ -163,19 +191,22 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
             self.updatePixmap()
         except Exception as e:
             print("Error: ", str(e))
+        self.updatePixmap()
 
     def updatePixmap(self):
         if self.loaded:
-            x = float(self.edits["x"].text())
-            y = float(self.edits["y"].text())
-            w = float(self.edits["width"].text())
-            h = float(self.edits["width"].text()) / float(self.edits["aspect ratio"].text())
-            self.resetTransform()
-            rect = self.boundingRect()
-            translation = QtGui.QTransform.fromTranslate(x, y)
-            self.setTransform(translation)
-            scaling = QtGui.QTransform.fromScale(w/rect.width(), h/rect.height())
-            self.setTransform(scaling, True)
+            #x = float(self.edits["x"].text())
+            #y = float(self.edits["y"].text())
+            #a = float(self.edits["angle"].text())
+            #s = float(self.edits["width"].text()) / float(self.edits["aspect ratio"].text())
+            #r = float(self.edits["width"].text()) / float(self.edits["aspect ratio"].text())
+            all_params = [float(self.edits[key].text()) for key in list(self.sides)]
+            transform = QtGui.QTransform()
+            transform.translate(all_params[0], all_params[1])
+            transform.rotate(all_params[2])
+            transform.scale(all_params[3], all_params[3] / all_params[4] / (float(self.w)/float(self.h)))
+            transform.scale(1 / self.w, 1 / self.h)
+            self.setTransform(transform)
 
     def remove_anchor(self, anchor_item):
         self.anchor_items.remove(anchor_item)
@@ -186,28 +217,52 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
         """ Use least squares method to find the best transform which fits the anchor points"""
         if len(self.anchor_items) < 1:
             return
+
+        keys = list(self.sides)
+        print(keys)
+        all_params = [float(self.edits[key].text()) for key in keys]
+        params_index = [] # indexes of free params
+        init_params = [] #init values of free params
+        for i in range(len(keys)):
+            print(not self.checks[keys[i]].isChecked())
+            print(len(params_index))
+            print(2 * len(self.anchor_items))
+            if not self.checks[keys[i]].isChecked() and len(params_index) < 2 * len(self.anchor_items):
+                params_index.append(i)
+                init_params.append(all_params[i])
+        print("init params ", init_params, " params_index ", params_index)
         data = [(a.pos(),a.real_pos) for a in self.anchor_items]
+
+        def generate_all_params(params):
+            j = 0
+            for i in params_index:
+                all_params[i] = params[j]
+                j += 1
+
         def build_transform(params):
+            generate_all_params(params)
+            print(all_params)
             transform = QtGui.QTransform()
-            if len(params >= 2):
-                transform.translate(params[0], params[1])
-            if len(params >= 3):
-                transform.rotate(params[3])
-            if len(params >= 5):
-                transform.scale(params[4],params[5])
+            transform.translate(all_params[0], all_params[1])
+            transform.rotate(all_params[2])
+            transform.scale(all_params[3], all_params[3] / all_params[4] / (float(self.w) / float(self.h)))
+            transform.scale(1 / self.w, 1 / self.h)
             return transform
         
         def fitfunc(params):
             transform = build_transform(params)
             chi2 = 0.
-            for point0,point1 in data:
-                diff = point1 - transform.map(point0)
+            for point0, point1 in data:
+                diff = QtCore.QPointF(point1[0], point1[1]) - transform.map(point0)
                 chi2 += diff.x()**2 + diff.y()**2
             return chi2
-        
-        best = optimize.fmin(fitfunc, [1,1])
-        print(best)
-        self.setTransform(build_transform(best))
+
+        best = optimize.fmin(fitfunc, init_params)
+        generate_all_params(best)
+        for i in range(len(keys)):
+            self.edits[keys[i]].setText(str(all_params[i]))
+            self.updatePixmap()
+
 
 
 
