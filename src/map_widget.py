@@ -4,6 +4,7 @@ from scipy import optimize
 import math
 from PyQt5 import QtWidgets,QtGui,QtCore,QtSvg
 from collections import OrderedDict
+import jsonpickle
 
 
 class ZoomableGraphicsView(QtWidgets.QGraphicsView):
@@ -309,10 +310,29 @@ class MapWidget(QtWidgets.QWidget):
         self.startButton = QtWidgets.QPushButton("Start control")
         self.startButton.setCheckable(True)
         self.startButton.clicked.connect(self.start)
+        self.startButton.clicked.connect(self.saveSettings)
         buttonlayout.addWidget(self.startButton)
         buttonlayout.addStretch(1)
         layout.addLayout(buttonlayout)
 
+
+    def loadSettings(self):
+        try:
+            with open("config\\map_widget.cfg", "r") as file:
+                axes = jsonpickle.decode(file.read())
+                for direction in axes:
+                    self.combos[direction].setCurrentText(axes[direction])
+
+        except Exception as e:
+            print(e)
+
+    def saveSettings(self):
+        try:
+            with open("config\\map_widget.cfg", "w") as file:
+                axes = {direction : self.combos[direction].currentText() for direction in self.combos}
+                file.write(jsonpickle.encode(axes))
+        except Exception as e:
+            print(e)
 
 
     def setupScene(self):
@@ -368,6 +388,8 @@ class MapWidget(QtWidgets.QWidget):
             for name, func in self.pools:
                 combo.addItem(name, func)
             combo.setCurrentIndex(n)
+
+        self.loadSettings()
             
             
     def timeout(self):
