@@ -118,10 +118,6 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
         for i in ["x", "y", "width"]:
             self.checks[i].setChecked(1)
 
-        def editLocker(s):
-            def f(checked):
-                self.edits[s].setEnabled(checked)
-            return f
 
 
     def contextMenuEvent(self, event):
@@ -192,11 +188,11 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
 
     def updatePixmap(self):
         if self.loaded:
-            all_params = [float(self.edits[key].text()) for key in list(self.sides)]
+            transform_params = [float(self.edits[key].text()) for key in list(self.sides)]
             transform = QtGui.QTransform()
-            transform.translate(all_params[0], all_params[1])
-            transform.rotate(all_params[2])
-            transform.scale(all_params[3], all_params[3] / all_params[4] / (float(self.w)/float(self.h)))
+            transform.translate(transform_params[0], transform_params[1])
+            transform.rotate(transform_params[2])
+            transform.scale(transform_params[3], transform_params[3] / transform_params[4] / (float(self.w)/float(self.h)))
             transform.scale(1 / self.w, 1 / self.h)
             self.setTransform(transform)
 
@@ -211,30 +207,28 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
             return
 
         keys = list(self.sides)
-        print(keys)
-        all_params = [float(self.edits[key].text()) for key in keys]
-        params_index = [] # indexes of free params
-        init_params = [] #init values of free params
-        for i in range(len(keys)):
-            if self.checks[keys[i]].isChecked() and len(params_index) < 2 * len(self.anchor_items):
-                params_index.append(i)
-                init_params.append(all_params[i])
-        print("init params ", init_params, " params_index ", params_index)
+        transform_params = [float(self.edits[key].text()) for key in keys]
+        free_params_index = [] # indexes of free params
+        free_params_initial = []
+        for i in range(len(keys)): # take at most first 2*n free parameters when there are n anchors
+            if self.checks[keys[i]].isChecked() and len(free_params_index) < 2 * len(self.anchor_items):
+                free_params_index.append(i)
+                free_params_initial.append(transform_params[i])
+        #print("init params ", free_params_initial, " free_params_index ", free_params_index)
         data = [(a.pos(),a.real_pos) for a in self.anchor_items]
 
-        def generate_all_params(params):
+        def update_transform_params(params):
             j = 0
-            for i in params_index:
-                all_params[i] = params[j]
+            for i in free_params_index:
+                transform_params[i] = params[j]
                 j += 1
 
         def build_transform(params):
-            generate_all_params(params)
-            print(all_params)
+            update_transform_params(params)
             transform = QtGui.QTransform()
-            transform.translate(all_params[0], all_params[1])
-            transform.rotate(all_params[2])
-            transform.scale(all_params[3], all_params[3] / all_params[4] / (float(self.w) / float(self.h)))
+            transform.translate(transform_params[0], transform_params[1])
+            transform.rotate(transform_params[2])
+            transform.scale(transform_params[3], transform_params[3] / transform_params[4] / (float(self.w) / float(self.h)))
             transform.scale(1 / self.w, 1 / self.h)
             return transform
         
@@ -246,10 +240,10 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
                 chi2 += diff.x()**2 + diff.y()**2
             return chi2
 
-        best = optimize.fmin(fitfunc, init_params)
-        generate_all_params(best)
+        best = optimize.fmin(fitfunc, free_params_initial)
+        update_transform_params(best)
         for i in range(len(keys)):
-            self.edits[keys[i]].setText(str(all_params[i]))
+            self.edits[keys[i]].setText(str(transform_params[i]))
             self.updatePixmap()
 
 
