@@ -100,32 +100,29 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
         self.checks = OrderedDict([])
         col = 1
         for s in self.sides:
-            self.hlayout.addWidget(QtWidgets.QLabel(s + ":"), 0, 2 * col - 1, 1 ,2)
+            self.hlayout.addWidget(QtWidgets.QLabel(s + ":"), 0, 2 * col - 1)
 
             edit = QtWidgets.QLineEdit(str(self.sides[s]))
             edit.setValidator(QtGui.QDoubleValidator())
-            self.hlayout.addWidget(edit, 1, 2 * col-1)
+            self.hlayout.addWidget(edit, 1, 2 * col-1, 1 ,2)
             edit.setFixedWidth(120)
             edit.editingFinished.connect(self.updatePixmap)
             self.edits[s] = edit
 
-            check = QtWidgets.QCheckBox("Manual")
-            check.setChecked(1)
-            self.hlayout.addWidget(check, 1, 2 * col)
+            check = QtWidgets.QCheckBox("Fit")
+            self.hlayout.addWidget(check, 0, 2 * col)
             self.checks[s] = check
 
             col += 1
+
+        for i in ["x", "y", "width"]:
+            self.checks[i].setChecked(1)
 
         def editLocker(s):
             def f(checked):
                 self.edits[s].setEnabled(checked)
             return f
 
-        for s in self.sides:
-            self.checks[s].stateChanged.connect(editLocker(s))
-
-    def refreshLockedEdit(self, edit, checked):
-        edit.setEnabled(checked)
 
     def contextMenuEvent(self, event):
         menu = QtWidgets.QMenu()
@@ -139,9 +136,9 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
             dialog.setWindowTitle("Anchor this point")
             layout = QtWidgets.QFormLayout()
             dialog.setLayout(layout)
-            x_input = QtWidgets.QLineEdit(str(self.parent.cursor.x())) #TODO: z current_coordinates
+            x_input = QtWidgets.QLineEdit(str(self.parent.cursor.x()))
             layout.addRow("X coordinate", x_input)
-            y_input = QtWidgets.QLineEdit(str(self.parent.cursor.y())) #TODO: z current_coordinates
+            y_input = QtWidgets.QLineEdit(str(self.parent.cursor.y()))
             layout.addRow("Y coordinate", y_input)
             buttonBox = QtWidgets.QDialogButtonBox()
             buttonBox.setOrientation(QtCore.Qt.Horizontal)
@@ -195,11 +192,6 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
 
     def updatePixmap(self):
         if self.loaded:
-            #x = float(self.edits["x"].text())
-            #y = float(self.edits["y"].text())
-            #a = float(self.edits["angle"].text())
-            #s = float(self.edits["width"].text()) / float(self.edits["aspect ratio"].text())
-            #r = float(self.edits["width"].text()) / float(self.edits["aspect ratio"].text())
             all_params = [float(self.edits[key].text()) for key in list(self.sides)]
             transform = QtGui.QTransform()
             transform.translate(all_params[0], all_params[1])
@@ -224,10 +216,7 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
         params_index = [] # indexes of free params
         init_params = [] #init values of free params
         for i in range(len(keys)):
-            print(not self.checks[keys[i]].isChecked())
-            print(len(params_index))
-            print(2 * len(self.anchor_items))
-            if not self.checks[keys[i]].isChecked() and len(params_index) < 2 * len(self.anchor_items):
+            if self.checks[keys[i]].isChecked() and len(params_index) < 2 * len(self.anchor_items):
                 params_index.append(i)
                 init_params.append(all_params[i])
         print("init params ", init_params, " params_index ", params_index)
