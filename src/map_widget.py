@@ -108,6 +108,7 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
             self.hlayout.addWidget(edit, 1, 2 * col-1, 1 ,2)
             edit.setFixedWidth(120)
             edit.editingFinished.connect(self.updatePixmap)
+            edit.editingFinished.connect(self.save_settings)
             self.edits[s] = edit
 
             check = QtWidgets.QCheckBox("Fit")
@@ -152,6 +153,7 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
                 pos = self.mapFromScene(event.scenePos())
                 anchor.setPos(pos)
                 self.anchor_items.append(anchor)
+                self.save_settings()
 
 
 
@@ -185,10 +187,10 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
             self.loaded = True
             self.setAcceptedMouseButtons(QtCore.Qt.RightButton)
             self.current_coordinates = (0, 0)
+            self.load_settings()
+            self.updatePixmap()
         except Exception as e:
             print("Error: ", str(e))
-        self.load_settings()
-        self.updatePixmap()
 
     def updatePixmap(self):
         if self.loaded:
@@ -199,7 +201,6 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
             transform.scale(transform_params[3], transform_params[3] / transform_params[4] / (float(self.w)/float(self.h)))
             transform.scale(1 / self.w, 1 / self.h)
             self.setTransform(transform)
-            self.save_settings()
 
     def load_settings(self):
         try:
@@ -235,6 +236,7 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
         self.anchor_items.remove(anchor_item)
         anchor_item.setParentItem(None)
         anchor_item.scene().removeItem(anchor_item)
+        self.save_settings()
         
     def find_best_transform(self):
         """ Use least squares method to find the best transform which fits the anchor points"""
@@ -280,7 +282,7 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
         for i in range(len(keys)):
             self.edits[keys[i]].setText(str(transform_params[i]))
         self.updatePixmap()
-
+        self.save_settings()
 
 
 
