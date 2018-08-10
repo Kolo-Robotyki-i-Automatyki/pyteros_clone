@@ -14,6 +14,7 @@ class ZoomableGraphicsView(QtWidgets.QGraphicsView):
         self.setMouseTracking(True)
         self.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
         self.setResizeAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
+        self.setTransform(self.transform().scale(1, -1))
 
     def wheelEvent(self, event):
         # Zoom Factor
@@ -178,6 +179,7 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
             else:
                 print("case2")
                 pixmap = QtGui.QPixmap(fileName)
+                pixmap = pixmap.transformed(QtGui.QTransform().scale(1, -1))
                 self.w = pixmap.width()
                 self.h = pixmap.height()
                 self.setPixmap(pixmap)
@@ -300,7 +302,7 @@ class MapWidget(QtWidgets.QWidget):
         self.timer.start()
         self.active = False
         
-        self.resize(500, 500)
+        self.resize(500, 700)
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
         self.viewwidget = ZoomableGraphicsView()

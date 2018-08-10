@@ -169,7 +169,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def createTabs(self):
 
         try:
-            from devices.attocube import anc350
+            from devices.attocube import dummyanc350 as anc350
             widget = WidgetForProcess(pub_port = anc350.default_pub_port,
                                       req_port = anc350.default_req_port,
                                       process_class = anc350.ANC350Worker)
