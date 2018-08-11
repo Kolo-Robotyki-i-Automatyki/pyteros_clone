@@ -304,12 +304,50 @@ class MapArea(QtWidgets.QGraphicsItem):
         self.step_y = 10.
         self.scene.addItem(self)
 
+        self.setAcceptHoverEvents(True)
+        self.border_size = 15
+        self.hover_rect = None
+        self.setFlags(QtWidgets.QGraphicsItem.ItemIsSelectable|QtWidgets.QGraphicsItem.ItemIsFocusable)
+
+
+    def update_border_rect(self, zoom):
+        rect = self.boundingRect()
+        dx = QtCore.QPointF(self.border_size / zoom, 0)
+        dy = QtCore.QPointF(0, -self.border_size / zoom)
+        self.border_rect = {}
+        self.border_rect['tl'] = QtCore.QRectF(rect.topLeft(), rect.topLeft() + dx - dy)
+        self.border_rect['tr'] = QtCore.QRectF(rect.topRight(), rect.topRight() - dx - dy)
+        self.border_rect['br'] = QtCore.QRectF(rect.bottomRight(), rect.bottomRight() - dx + dy)
+        self.border_rect['bl'] = QtCore.QRectF(rect.bottomLeft(), rect.bottomLeft() + dx + dy)
+        self.border_rect['t'] = QtCore.QRectF(rect.topLeft() + dx, rect.topRight() - dx - dy)
+        self.border_rect['r'] = QtCore.QRectF(rect.topRight() - dy, rect.bottomRight() - dx + dy)
+        self.border_rect['b'] = QtCore.QRectF(rect.bottomRight() - dx, rect.bottomLeft() + dx + dy)
+        self.border_rect['l'] = QtCore.QRectF(rect.bottomLeft() + dy, rect.topLeft() + dx - dy)
+
     def boundingRect(self):
         return QtCore.QRectF(0, 0, self.width, self.height)
+
+    #def hoverEnterEvent(self, event):
+    #    self.updateResizeHandles()
+    #    self.mouseOver = True
+    #    self.prepareGeometryChange()
+
+    def hoverLeaveEvent(self, event):
+        self.hover_rect = None
+
+    def hoverMoveEvent(self, event):
+        self.hover_rect = None
+        for rect in ['tl', 'tr', 'br', 'bl', 't', 'l', 'b', 'r']:
+            if self.border_rect[rect].contains(event.pos()):
+                self.hover_rect = rect
+        self.update()
+
 
     def paint(self, painter, option, widget=None):
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         zoom = option.levelOfDetailFromTransform(painter.worldTransform())
+
+        self.update_border_rect(zoom)
 
         pen = QtGui.QPen()
         pen.setCosmetic(True)  # fixed width regardless of transformations
@@ -317,6 +355,8 @@ class MapArea(QtWidgets.QGraphicsItem):
         pen.setWidth(2)
         painter.setPen(pen)
         painter.drawRect(self.boundingRect())
+        if self.hover_rect != None:
+            painter.drawRect(self.border_rect[self.hover_rect])
 
         max_grid = max(zoom * self.step_x, zoom * self.step_y)
         if max_grid > 5:
@@ -454,6 +494,7 @@ class MapWidget(QtWidgets.QWidget):
             position = QtCore.QPointF(event.scenePos())
             self.xwidget.setText(str(position.x()))
             self.ywidget.setText(str(position.y()))
+            QtWidgets.QGraphicsScene.mouseMoveEvent(self.scene, event) #propagate to objects in scene
             
         self.scene.mouseMoveEvent = onMouseMoveEvent
         
