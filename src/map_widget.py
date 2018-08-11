@@ -10,11 +10,13 @@ import jsonpickle
 class ZoomableGraphicsView(QtWidgets.QGraphicsView):
     def __init__ (self, parent=None):
         super().__init__ (parent)
-        self.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
+        #self.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
         self.setMouseTracking(True)
         self.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
         self.setResizeAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
         self.setTransform(self.transform().scale(1, -1))
+        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
 
     def wheelEvent(self, event):
         # Zoom Factor
@@ -286,6 +288,70 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
         self.updatePixmap()
         self.save_settings()
 
+epsilon = 0.0000000001
+
+class MapArea(QtWidgets.QGraphicsItem):
+    def __init__(self, parent):
+        super().__init__()
+        self.parent = parent
+        self.scene = parent.scene
+        self.setZValue(10)
+        self.x = 100.
+        self.y = 200.
+        self.width = 300.
+        self.height = 400.
+        self.step_x = 10.
+        self.step_y = 10.
+        self.scene.addItem(self)
+
+    def boundingRect(self):
+        return QtCore.QRectF(0, 0, self.width, self.height)
+
+    def paint(self, painter, option, widget=None):
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        zoom = option.levelOfDetailFromTransform(painter.worldTransform())
+
+        pen = QtGui.QPen()
+        pen.setCosmetic(True)  # fixed width regardless of transformations
+        pen.setColor(QtGui.QColor(128, 128, 128))
+        pen.setWidth(2)
+        painter.setPen(pen)
+        painter.drawRect(self.boundingRect())
+
+        max_grid = max(zoom * self.step_x, zoom * self.step_y)
+        if max_grid > 5:
+            pen = QtGui.QPen()
+            pen.setCosmetic(True)  # fixed width regardless of transformations
+            pen.setColor(QtGui.QColor(255, 0, 0))
+            pen.setWidth(max(2, min(7, max_grid / 5)))
+            painter.setPen(pen)
+
+            #calculate which area of map rectangle is visible on screen
+            visible_rect = self.parent.viewwidget.mapToScene(self.parent.viewwidget.viewport().geometry()).boundingRect()
+            x1 = max(visible_rect.x() - self.x, 0)
+            x2 = min(visible_rect.x() + visible_rect.width() - self.x, self.width)
+            y1 = max(visible_rect.y() - self.y, 0)
+            y2 = min(visible_rect.y() + visible_rect.height() - self.y, self.height)
+            #print([x1,x2,y1,y2])
+
+            for ix in range(int(x1 / self.step_x - epsilon + 1), int(x2 / self.step_x + epsilon) + 1):
+                for iy in range(int(y1 / self.step_y - epsilon + 1), int(y2 / self.step_y + epsilon) + 1):
+                    painter.drawPoint(QtCore.QPointF(self.step_x * ix, self.step_y * iy))
+
+        transform = QtGui.QTransform()
+        transform.translate(self.x, self.y)
+        self.setTransform(transform)
+
+    def get_positions(self):
+        positions = []
+        if(self.step_x > 0 and self.step_y > 0):
+            n_x = int(self.width / self.step_x + epsilon + 1)
+            n_y = int(self.height / self.step_y + epsilon + 1)
+            if n_x * n_y <= 1000000:
+                for ix in range(n_x):
+                    for iy in range(n_y):
+                        positions.append((self.x + self.step_x * ix, self.y + self.step_y * iy))
+        return positions
 
 
 class MapWidget(QtWidgets.QWidget):
@@ -295,14 +361,14 @@ class MapWidget(QtWidgets.QWidget):
         self.slaves = []
         self.pools = []
         self.bg_item = None
-        
+
         self.timer = QtCore.QTimer(self)
-        self.timer.setInterval(100)
+        self.timer.setInterval(40)
         self.timer.timeout.connect(self.timeout)
         self.timer.start()
         self.active = False
         
-        self.resize(500, 700)
+        #self.resize(500, 700)
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
         self.viewwidget = ZoomableGraphicsView()
@@ -353,7 +419,6 @@ class MapWidget(QtWidgets.QWidget):
         buttonlayout.addStretch(1)
         layout.addLayout(buttonlayout)
 
-
     def loadSettings(self):
         try:
             with open("config\\map_widget.cfg", "r") as file:
@@ -393,6 +458,8 @@ class MapWidget(QtWidgets.QWidget):
         self.scene.mouseMoveEvent = onMouseMoveEvent
         
         self.bg_item = SampleImageItem(self)
+
+        self.maparea = MapArea(self)
         
 
     def start(self, activate=True):

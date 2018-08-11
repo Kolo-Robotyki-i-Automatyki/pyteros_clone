@@ -23,7 +23,7 @@ class MainWindow(QtWidgets.QMainWindow):
         fileMenu = self.menuBar().addMenu("&File")
         fileMenu.addAction(quitAct)        
         self.controlMenu = self.menuBar().addMenu("&Devices")
-    
+        self.resize(self.width(), 800)
     
     def createConsoleTab(self):
         """ Initialize a python console and return its widget """
