@@ -324,7 +324,7 @@ class MapArea(QtWidgets.QGraphicsItem):
         dy = QtCore.QPointF(0, -self.border_size / zoom) # minus because y axis inversion
         self.border_rect = {}
         self.border_rect_ordered_keys = ['c', 'l', 'b', 'r', 't', 'bl', 'tl', 'br', 'tr']
-        self.border_rect['bl'] = QtCore.QRectF(rect.topLeft(), rect.topLeft() + dx - dy)
+        self.border_rect['bl'] = QtCore.QRectF(rect.topLeft(), rect.topLeft() + dx - dy) # top and bottom switched - y axis inversion
         self.border_rect['br'] = QtCore.QRectF(rect.topRight(), rect.topRight() - dx - dy)
         self.border_rect['tr'] = QtCore.QRectF(rect.bottomRight(), rect.bottomRight() - dx + dy)
         self.border_rect['tl'] = QtCore.QRectF(rect.bottomLeft(), rect.bottomLeft() + dx + dy)
@@ -346,8 +346,9 @@ class MapArea(QtWidgets.QGraphicsItem):
         self.refresh_hover_rect(event.pos())
 
     def hoverLeaveEvent(self, event):
-        self.hover_rect = None
+        self.hover = None
         self.update()
+        self.scene.update()
 
     def hoverMoveEvent(self, event):
         self.refresh_hover_rect(event.pos())
@@ -357,7 +358,7 @@ class MapArea(QtWidgets.QGraphicsItem):
         for rect in self.border_rect_ordered_keys:
             if self.border_rect[rect].contains(mouse_pos):
                 self.hover = rect
-        self.update()
+        self.scene.update()
 
     def mousePressEvent(self, event):
         if event.button() != QtCore.Qt.LeftButton:
@@ -371,6 +372,7 @@ class MapArea(QtWidgets.QGraphicsItem):
     def mouseReleaseEvent(self, event):
         if event.button() != QtCore.Qt.LeftButton:
             return
+        self.refresh_hover_rect(event.pos())
         self.drag = None
 
     def mouseMoveEvent(self, event):
