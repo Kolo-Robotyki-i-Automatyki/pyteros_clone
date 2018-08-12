@@ -297,7 +297,13 @@ class MapArea(QtWidgets.QGraphicsItem):
         self.scene = parent.scene
         self.setZValue(10)
         self.x = 100.
+        def set_x(self, x):
+            self.x = x
+            self.update_transform()
         self.y = 200.
+        def set_y(self, y):
+            self.y = y
+            self.update_transform()
         self.width = 300.
         self.height = 400.
         self.step_x = 10.
@@ -317,6 +323,7 @@ class MapArea(QtWidgets.QGraphicsItem):
         dx = QtCore.QPointF(self.border_size / zoom, 0)
         dy = QtCore.QPointF(0, -self.border_size / zoom) # minus because y axis inversion
         self.border_rect = {}
+        self.border_rect_ordered_keys = ['c', 'l', 'b', 'r', 't', 'bl', 'tl', 'br', 'tr']
         self.border_rect['bl'] = QtCore.QRectF(rect.topLeft(), rect.topLeft() + dx - dy)
         self.border_rect['br'] = QtCore.QRectF(rect.topRight(), rect.topRight() - dx - dy)
         self.border_rect['tr'] = QtCore.QRectF(rect.bottomRight(), rect.bottomRight() - dx + dy)
@@ -347,7 +354,7 @@ class MapArea(QtWidgets.QGraphicsItem):
 
     def refresh_hover_rect(self, mouse_pos):
         self.hover = None
-        for rect in self.border_rect:
+        for rect in self.border_rect_ordered_keys:
             if self.border_rect[rect].contains(mouse_pos):
                 self.hover = rect
         self.update()
@@ -356,7 +363,7 @@ class MapArea(QtWidgets.QGraphicsItem):
         if event.button() != QtCore.Qt.LeftButton:
             return
         self.drag = None
-        for rect in self.border_rect:
+        for rect in self.border_rect_ordered_keys: # rectangles can overlap for small zoom, ordering prefers corners for easy resize
             if self.border_rect[rect].contains(event.pos()):
                 self.drag = rect
         self.drag_pos = event.pos()
@@ -393,10 +400,12 @@ class MapArea(QtWidgets.QGraphicsItem):
                 self.drag = self.hover = flip_x[self.drag]
                 self.width = -self.width
                 self.x -= self.width
+                self.drag_pos.setX(self.drag_pos.x() + self.width)
             if self.height < 0:
                 self.drag = self.hover = flip_y[self.drag]
                 self.height = -self.height
                 self.y -= self.height
+                self.drag_pos.setY(self.drag_pos.y() + self.height)
 
             self.update_transform()
             self.scene.update()
