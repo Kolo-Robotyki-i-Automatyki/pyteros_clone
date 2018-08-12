@@ -306,41 +306,100 @@ class MapArea(QtWidgets.QGraphicsItem):
 
         self.setAcceptHoverEvents(True)
         self.border_size = 15
-        self.hover_rect = None
-        self.setFlags(QtWidgets.QGraphicsItem.ItemIsSelectable|QtWidgets.QGraphicsItem.ItemIsFocusable)
+        self.hover = None
+        self.drag = None
+        self.setFlags(QtWidgets.QGraphicsItem.ItemIsSelectable | QtWidgets.QGraphicsItem.ItemIsFocusable)
+        self.update_transform()
 
 
     def update_border_rect(self, zoom):
         rect = self.boundingRect()
         dx = QtCore.QPointF(self.border_size / zoom, 0)
-        dy = QtCore.QPointF(0, -self.border_size / zoom)
+        dy = QtCore.QPointF(0, -self.border_size / zoom) # minus because y axis inversion
         self.border_rect = {}
-        self.border_rect['tl'] = QtCore.QRectF(rect.topLeft(), rect.topLeft() + dx - dy)
-        self.border_rect['tr'] = QtCore.QRectF(rect.topRight(), rect.topRight() - dx - dy)
-        self.border_rect['br'] = QtCore.QRectF(rect.bottomRight(), rect.bottomRight() - dx + dy)
-        self.border_rect['bl'] = QtCore.QRectF(rect.bottomLeft(), rect.bottomLeft() + dx + dy)
-        self.border_rect['t'] = QtCore.QRectF(rect.topLeft() + dx, rect.topRight() - dx - dy)
+        self.border_rect['bl'] = QtCore.QRectF(rect.topLeft(), rect.topLeft() + dx - dy)
+        self.border_rect['br'] = QtCore.QRectF(rect.topRight(), rect.topRight() - dx - dy)
+        self.border_rect['tr'] = QtCore.QRectF(rect.bottomRight(), rect.bottomRight() - dx + dy)
+        self.border_rect['tl'] = QtCore.QRectF(rect.bottomLeft(), rect.bottomLeft() + dx + dy)
+        self.border_rect['b'] = QtCore.QRectF(rect.topLeft() + dx, rect.topRight() - dx - dy)
         self.border_rect['r'] = QtCore.QRectF(rect.topRight() - dy, rect.bottomRight() - dx + dy)
-        self.border_rect['b'] = QtCore.QRectF(rect.bottomRight() - dx, rect.bottomLeft() + dx + dy)
+        self.border_rect['t'] = QtCore.QRectF(rect.bottomRight() - dx, rect.bottomLeft() + dx + dy)
         self.border_rect['l'] = QtCore.QRectF(rect.bottomLeft() + dy, rect.topLeft() + dx - dy)
+        self.border_rect['c'] = QtCore.QRectF(rect.bottomLeft() + dx + dy, rect.topRight() - dx - dy)
 
     def boundingRect(self):
         return QtCore.QRectF(0, 0, self.width, self.height)
 
-    #def hoverEnterEvent(self, event):
-    #    self.updateResizeHandles()
-    #    self.mouseOver = True
-    #    self.prepareGeometryChange()
+    def update_transform(self):
+        transform = QtGui.QTransform()
+        transform.translate(self.x, self.y)
+        self.setTransform(transform)
+
+    def hoverEnterEvent(self, event):
+        self.refresh_hover_rect(event.pos())
 
     def hoverLeaveEvent(self, event):
         self.hover_rect = None
+        self.update()
 
     def hoverMoveEvent(self, event):
-        self.hover_rect = None
-        for rect in ['tl', 'tr', 'br', 'bl', 't', 'l', 'b', 'r']:
-            if self.border_rect[rect].contains(event.pos()):
-                self.hover_rect = rect
+        self.refresh_hover_rect(event.pos())
+
+    def refresh_hover_rect(self, mouse_pos):
+        self.hover = None
+        for rect in self.border_rect:
+            if self.border_rect[rect].contains(mouse_pos):
+                self.hover = rect
         self.update()
+
+    def mousePressEvent(self, event):
+        if event.button() != QtCore.Qt.LeftButton:
+            return
+        self.drag = None
+        for rect in self.border_rect:
+            if self.border_rect[rect].contains(event.pos()):
+                self.drag = rect
+        self.drag_pos = event.pos()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() != QtCore.Qt.LeftButton:
+            return
+        self.drag = None
+
+    def mouseMoveEvent(self, event):
+        if self.drag != None:
+            flip_x = {'l': 'r', 'tl': 'tr', 't': 't', 'tr' : 'tl', 'r': 'l', 'br' : 'bl', 'b' : 'b', 'bl': 'br'}
+            flip_y = {'l': 'l', 'tl': 'bl', 't': 'b', 'tr' : 'br', 'r': 'r', 'br' : 'tr', 'b' : 't', 'bl': 'tl'}
+            v = event.pos() - self.drag_pos
+
+            if self.drag == 'c':
+                self.x += v.x()
+                self.y += v.y()
+
+            if self.drag == 'l' or self.drag == 'tl' or self.drag == 'bl':
+                self.x += v.x()
+                self.width -= v.x()
+            if self.drag == 'r' or self.drag == 'tr' or self.drag == 'br':
+                self.width += v.x()
+                self.drag_pos.setX(self.drag_pos.x() + v.x())
+            if self.drag == 'b' or self.drag == 'bl' or self.drag == 'br':
+                self.y += v.y()
+                self.height -= v.y()
+            if self.drag == 't' or self.drag == 'tl' or self.drag == 'tr':
+                self.height += v.y()
+                self.drag_pos.setY(self.drag_pos.y() + v.y())
+
+            if self.width < 0:
+                self.drag = self.hover = flip_x[self.drag]
+                self.width = -self.width
+                self.x -= self.width
+            if self.height < 0:
+                self.drag = self.hover = flip_y[self.drag]
+                self.height = -self.height
+                self.y -= self.height
+
+            self.update_transform()
+            self.scene.update()
 
 
     def paint(self, painter, option, widget=None):
@@ -355,8 +414,8 @@ class MapArea(QtWidgets.QGraphicsItem):
         pen.setWidth(2)
         painter.setPen(pen)
         painter.drawRect(self.boundingRect())
-        if self.hover_rect != None:
-            painter.drawRect(self.border_rect[self.hover_rect])
+        if self.hover != None:
+            painter.drawRect(self.border_rect[self.hover])
 
         max_grid = max(zoom * self.step_x, zoom * self.step_y)
         if max_grid > 5:
@@ -372,15 +431,11 @@ class MapArea(QtWidgets.QGraphicsItem):
             x2 = min(visible_rect.x() + visible_rect.width() - self.x, self.width)
             y1 = max(visible_rect.y() - self.y, 0)
             y2 = min(visible_rect.y() + visible_rect.height() - self.y, self.height)
-            #print([x1,x2,y1,y2])
 
             for ix in range(int(x1 / self.step_x - epsilon + 1), int(x2 / self.step_x + epsilon) + 1):
                 for iy in range(int(y1 / self.step_y - epsilon + 1), int(y2 / self.step_y + epsilon) + 1):
                     painter.drawPoint(QtCore.QPointF(self.step_x * ix, self.step_y * iy))
 
-        transform = QtGui.QTransform()
-        transform.translate(self.x, self.y)
-        self.setTransform(transform)
 
     def get_positions(self):
         positions = []
