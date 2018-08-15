@@ -16,8 +16,8 @@ class ZoomableGraphicsView(QtWidgets.QGraphicsView):
         self.setResizeAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
         self.setTransform(self.transform().scale(1, -1))
 
-        #self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        #self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
 
         self.list_key_on = []
         self.list_key_pressed = []
@@ -29,8 +29,8 @@ class ZoomableGraphicsView(QtWidgets.QGraphicsView):
         self.arrow_navigation_timer.start()
         #self.resizeEvent.connect(self.refresh_geometry_change)
 
-    def resizeEvent(self, geometry):
-        self.setSceneRect(QtCore.QRectF(self.geometry()))
+    #def resizeEvent(self, geometry):
+    #    self.setSceneRect(QtCore.QRectF(self.geometry()))
 
     def keyPressEvent(self, event):
         self.list_key_on.append(event.key())
@@ -52,11 +52,10 @@ class ZoomableGraphicsView(QtWidgets.QGraphicsView):
             dx -= 1
         if QtCore.Qt.Key_Right in self.list_key_on:
             dx += 1
-        #print(dx, dy)
         if dx != 0 or dy != 0:
             #h_scroll_d = self.horizontalScrollBar().value() - self.horizontalScrollBar().minimum()
-            zoom = self.sceneRect().width() / self.width()
-            print(self.sceneRect().width(), self.width())
+            zoom = math.sqrt(abs(self.transform().determinant()))
+            print(zoom)
             step = (self.sceneRect().width() + self.sceneRect().height()) / 2 * self.arrow_navigation_interval / 1000 / zoom # 1 screen/s
             self.setSceneRect(self.sceneRect().x() + dx * step, self.sceneRect().y() + dy * step, self.sceneRect().width(), self.sceneRect().height())
 
