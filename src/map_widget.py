@@ -15,8 +15,62 @@ class ZoomableGraphicsView(QtWidgets.QGraphicsView):
         self.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
         self.setResizeAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
         self.setTransform(self.transform().scale(1, -1))
-        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+
+        #self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        #self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+
+        self.list_key_on = []
+        self.list_key_pressed = []
+        self.list_key_released = []
+        self.arrow_navigation_timer = QtCore.QTimer()
+        self.arrow_navigation_timer.timeout.connect(self.loop_arrow_navigation)
+        self.arrow_navigation_interval = 25
+        self.arrow_navigation_timer.setInterval(self.arrow_navigation_interval)
+        self.arrow_navigation_timer.start()
+        #self.resizeEvent.connect(self.refresh_geometry_change)
+
+    def resizeEvent(self, geometry):
+        self.setSceneRect(QtCore.QRectF(self.geometry()))
+
+    def keyPressEvent(self, event):
+        self.list_key_on.append(event.key())
+        self.list_key_pressed.append(event.key())
+        event.accept()
+
+    def keyReleaseEvent(self, event):
+        self.list_key_on.remove(event.key())
+        self.list_key_released.append(event.key())
+        event.accept()
+
+    def loop_arrow_navigation(self):
+        dx = dy = 0
+        if QtCore.Qt.Key_Up in self.list_key_on:
+            dy += 1
+        if QtCore.Qt.Key_Down in self.list_key_on:
+            dy -= 1
+        if QtCore.Qt.Key_Left in self.list_key_on:
+            dx -= 1
+        if QtCore.Qt.Key_Right in self.list_key_on:
+            dx += 1
+        #print(dx, dy)
+        if dx != 0 or dy != 0:
+            #h_scroll_d = self.horizontalScrollBar().value() - self.horizontalScrollBar().minimum()
+            zoom = self.sceneRect().width() / self.width()
+            print(self.sceneRect().width(), self.width())
+            step = (self.sceneRect().width() + self.sceneRect().height()) / 2 * self.arrow_navigation_interval / 1000 / zoom # 1 screen/s
+            self.setSceneRect(self.sceneRect().x() + dx * step, self.sceneRect().y() + dy * step, self.sceneRect().width(), self.sceneRect().height())
+
+            #self.horizontalScrollBar().setValue(h_scroll_value + self.horizontalScrollBar().minimum())
+
+            #self.horiz
+            viewCenter = self.mapToScene(self.width() / 2., self.height() / 2.)
+            viewCenter += QtCore.QPointF(dx * step, dy * step)
+            self.centerOn(viewCenter)
+
+        self.list_key_pressed = []
+        self.list_key_released = []
+
+
 
     def wheelEvent(self, event):
         # Zoom Factor
@@ -44,6 +98,7 @@ class ZoomableGraphicsView(QtWidgets.QGraphicsView):
 
         old_transform = self.transform()
         scene_rect = self.sceneRect()
+
         self.setSceneRect(scene_rect.x() - delta.x(), scene_rect.y() - delta.y(), scene_rect.width(), scene_rect.height())
         self.setTransform(old_transform)
 
@@ -288,14 +343,15 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
         self.updatePixmap()
         self.save_settings()
 
-epsilon = 0.0000000001
 
-class MapArea(QtWidgets.QGraphicsItem):
+class MapAreaItem(QtWidgets.QGraphicsItem):
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
         self.scene = parent.scene
         self.setZValue(10)
+
+        self.epsilon = 0.0000000001
         self.x = 100.
         def set_x(self, x):
             self.x = x
@@ -429,7 +485,7 @@ class MapArea(QtWidgets.QGraphicsItem):
             painter.drawRect(self.border_rect[self.hover])
 
         max_grid = max(zoom * self.step_x, zoom * self.step_y)
-        if max_grid > 5:
+        if max_grid > 6:
             pen = QtGui.QPen()
             pen.setCosmetic(True)  # fixed width regardless of transformations
             pen.setColor(QtGui.QColor(255, 0, 0))
@@ -443,16 +499,16 @@ class MapArea(QtWidgets.QGraphicsItem):
             y1 = max(visible_rect.y() - self.y, 0)
             y2 = min(visible_rect.y() + visible_rect.height() - self.y, self.height)
 
-            for ix in range(int(x1 / self.step_x - epsilon + 1), int(x2 / self.step_x + epsilon) + 1):
-                for iy in range(int(y1 / self.step_y - epsilon + 1), int(y2 / self.step_y + epsilon) + 1):
+            for ix in range(int(x1 / self.step_x - self.epsilon + 1), int(x2 / self.step_x + self.epsilon) + 1):
+                for iy in range(int(y1 / self.step_y - self.epsilon + 1), int(y2 / self.step_y + self.epsilon) + 1):
                     painter.drawPoint(QtCore.QPointF(self.step_x * ix, self.step_y * iy))
 
 
     def get_positions(self):
         positions = []
         if(self.step_x > 0 and self.step_y > 0):
-            n_x = int(self.width / self.step_x + epsilon + 1)
-            n_y = int(self.height / self.step_y + epsilon + 1)
+            n_x = int(self.width / self.step_x + self.epsilon + 1)
+            n_y = int(self.height / self.step_y + self.epsilon + 1)
             if n_x * n_y <= 1000000:
                 for ix in range(n_x):
                     for iy in range(n_y):
@@ -533,6 +589,7 @@ class MapWidget(QtWidgets.QWidget):
                     self.combos[direction].setCurrentText(axes[direction])
 
         except Exception as e:
+            self.saveSettings()
             print(e)
 
     def saveSettings(self):
@@ -566,7 +623,7 @@ class MapWidget(QtWidgets.QWidget):
         
         self.bg_item = SampleImageItem(self)
 
-        self.maparea = MapArea(self)
+        self.maparea = MapAreaItem(self)
         
 
     def start(self, activate=True):
