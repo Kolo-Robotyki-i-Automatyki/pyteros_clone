@@ -4,6 +4,8 @@ from PyQt5 import QtCore
 import zmq
 import json
 from . import device
+import numpy as np
+import base64
 
 delegated_methods_db = {}
 def handler(cls,name):
@@ -14,6 +16,27 @@ def handler(cls,name):
 
 context = zmq.Context()
 
+
+
+class ArrayEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return {"dtype": obj.dtype.str,
+                    "shape": obj.shape,
+                    "data": base64.b64encode(obj.tobytes()).decode('ascii')}
+        # Let the base class default method raise the TypeError
+        return json.JSONEncoder.default(self, obj)
+
+def array_object_hook(d):
+    try:
+        a = np.frombuffer(base64.standard_b64decode(d["data"]),
+                          dtype=d["dtype"])
+        a.reshape(d["shape"])
+        return a
+    except:
+        return d
+
+
 class DeviceOverZeroMQ(device.Device):
     def __init__(self, req_port, pub_port=None, host="localhost"):
         self.thread = None
@@ -21,7 +44,7 @@ class DeviceOverZeroMQ(device.Device):
         self.client = context.socket(zmq.REQ)
         self.client.connect(self.channel)
         self.poll = zmq.Poller()
-        self.poll.register(self.client, zmq.POLLIN)        
+        self.poll.register(self.client, zmq.POLLIN)
         self.request_timeout = 2000 # 2s in milliseconds
         if pub_port:
             self.pub_channel = "tcp://"+host+":"+str(pub_port)
@@ -35,12 +58,12 @@ class DeviceOverZeroMQ(device.Device):
         def fun(self, *args):
             #print("internal: func: " + str(method_name))
             obj = (method_name, cls_name, args)
-            self.client.send_json(obj)
+            self.client.send_json(obj, cls=ArrayEncoder)
             
             
             socks = dict(self.poll.poll(self.request_timeout))
             if socks.get(self.client) == zmq.POLLIN:
-                return self.client.recv_json()
+                return self.client.recv_json(object_hook=array_object_hook)
             else:
                 # Timeout. 
                 # Socket is confused. Close and reopen to reset its state.
@@ -76,7 +99,7 @@ class DeviceOverZeroMQ(device.Device):
         def loop(self):
             while self.running:
                 msg = self.socket.recv_multipart()[1].decode('ascii')
-                status = json.loads(msg)
+                status = json.loads(msg, object_hook=array_object_hook)
                 self.message.emit(status)
             
     def createListenerThread(self, updateSlot):
@@ -168,7 +191,7 @@ class DeviceWorker(Process):
             if request[0] == 'quit':
                 break
             if request[0] == "status":
-                msg = json.dumps(self.status()).encode('ascii')
+                msg = json.dumps(self.status(), cls=ArrayEncoder).encode('ascii')
                 server.send(msg)
                 notifier.send_multipart([b"status", msg])
                 continue
@@ -176,7 +199,7 @@ class DeviceWorker(Process):
             try:
                 f = delegated_methods_db[(request[1],request[0])]
                 args = request[2]
-                server.send_json(f(self,*args))
+                server.send_json(f(self,*args), cls=ArrayEncoder)
             except Exception as e:
                 print("Exception: ", str(e))
                 server.send_json("ERROR processing request")
