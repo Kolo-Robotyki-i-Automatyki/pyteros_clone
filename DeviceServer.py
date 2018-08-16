@@ -9,7 +9,8 @@ from PyQt5 import Qt,QtCore,QtGui,QtWidgets
 import time
 from devices.demo.demo import WorkerForDummyDevice
 import zmq
-
+import devices
+import sys,traceback
 
 class ZMQ_Listener(QtCore.QObject):
     """ A class to implement a thread listening for stdout/stderr 
@@ -44,7 +45,7 @@ class WidgetForProcess(QtWidgets.QWidget):
         
         zmq_context = zmq.Context()
         self.sub_socket = zmq_context.socket(zmq.SUB)
-        self.sub_socket.connect("tcp://localhost:%d" % pub_port)
+        self.sub_socket.connect("tcp://localhost:%s" % str(pub_port))
         self.sub_socket.setsockopt(zmq.SUBSCRIBE, b'std')
         
         self.process = None
@@ -138,6 +139,7 @@ class WidgetForProcess(QtWidgets.QWidget):
 
 
 
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent = None):
         super().__init__(parent)
@@ -167,43 +169,16 @@ class MainWindow(QtWidgets.QMainWindow):
 
 
     def createTabs(self):
-
-        try:
-            from devices.attocube import dummyanc350 as anc350
-            widget = WidgetForProcess(pub_port = anc350.default_pub_port,
-                                      req_port = anc350.default_req_port,
-                                      process_class = anc350.ANC350Worker)
-            self.toolBox.addItem(widget, "ANC350")
-        except Exception as e:
-            print(str(e))
-
-        try:
-            from devices.misc import xbox
-            widget = WidgetForProcess(pub_port = xbox.default_pub_port,
-                                      req_port = xbox.default_req_port,
-                                      process_class = xbox.XBoxWorker)
-            self.toolBox.addItem(widget, "XBox pad")
-        except Exception as e:
-            print(str(e))
-
-        #try:
-        #    from devices.misc.xbox import XBoxPad,XBoxWorker
-        #    widget = WidgetForProcess(pub_port=6998,
-        #                              req_port=6999,
-        #                              process_class=WorkerForDummyDevice)
-        #    self.toolBox.addItem(widget, "Demo")
-        #except Exception as e:
-        #    print(str(e))
-
-        try:
-            from devices.thorlabs import apt
-            widget = WidgetForProcess(pub_port = apt.default_pub_port,
-                                      req_port = apt.default_req_port,
-                                      process_class = apt.APTWorker)
-            self.toolBox.addItem(widget, "Thorlabs APT")
-        except Exception as e:
-            print(str(e))
+        workers_desc = devices.load_workers()
         
+        for name,cls,kwargs in workers_desc:
+            try:
+                print(kwargs)
+                widget = WidgetForProcess(process_class=cls, **kwargs)
+                self.toolBox.addItem(widget, name)
+            except Exception as e:
+                #print(str(e))
+                traceback.print_exc(file=sys.stdout)        
 
 
 if __name__ == '__main__':

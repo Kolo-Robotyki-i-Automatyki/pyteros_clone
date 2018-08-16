@@ -38,7 +38,7 @@ def array_object_hook(d):
 
 
 class DeviceOverZeroMQ(device.Device):
-    def __init__(self, req_port, pub_port=None, host="localhost"):
+    def __init__(self, req_port, pub_port=None, host="localhost"):           
         self.thread = None
         self.channel = "tcp://"+host+":"+str(req_port)
         self.client = context.socket(zmq.REQ)

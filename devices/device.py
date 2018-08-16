@@ -48,9 +48,11 @@ class Parameter:
 """ A dictionary of loaded devices. Key is the interpreter name of the object """
 active_devices = {}
 
+
+import importlib
+import sys,traceback
+
 def load_devices():
-    import importlib
-    import sys,traceback
     config = configparser.ConfigParser()
     config.read('devices.ini')
     for section in config.sections():
@@ -65,4 +67,23 @@ def load_devices():
         except Exception as e:
             print("Loading device %s failed." % section)
             traceback.print_exc(file=sys.stdout)
-            
+
+def load_workers():
+    config = configparser.ConfigParser()
+    config.read('local_devices.ini')
+    workers = []
+    for section in config.sections():
+        try:
+            items = dict(config.items(section))
+            module_name, class_name = items['class'].rsplit(".", 1)
+            name = items['name']
+            kwargs = items.copy()
+            kwargs.pop('class')
+            kwargs.pop('name')
+            DeviceClass = getattr(importlib.import_module('devices.'+module_name), class_name)
+            workers.append( (name, DeviceClass, kwargs) )
+        except Exception as e:
+            print("Loading device %s failed." % section)
+            traceback.print_exc(file=sys.stdout)
+    return workers
+                        
