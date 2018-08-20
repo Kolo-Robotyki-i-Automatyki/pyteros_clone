@@ -140,7 +140,7 @@ def reminderFunc(context,req_channel,rate=0.1):
 
 
 class Logger():
-    def __init__(self, socket, stream="out", mutex):
+    def __init__(self, socket, mutex, stream="out"):
         self.socket = socket
         self.envelope = stream.encode('ascii')
         self.mutex_for_pubchannel = mutex
@@ -187,8 +187,8 @@ class DeviceWorker(Process):
         notifier.bind(self.PUBchannel)
         
         import sys
-        sys.stdout = Logger(notifier, "stdout", self.mutex_for_pubchannel)
-        sys.stderr = Logger(notifier, "stderr", self.mutex_for_pubchannel)
+        sys.stdout = Logger(notifier, self.mutex_for_pubchannel, "stdout")
+        sys.stderr = Logger(notifier, self.mutex_for_pubchannel, "stderr")
         time.sleep(0.5)
         
         reminderThread = threading.Thread(target=reminderFunc,
