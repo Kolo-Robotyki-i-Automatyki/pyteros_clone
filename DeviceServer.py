@@ -173,7 +173,6 @@ class MainWindow(QtWidgets.QMainWindow):
         
         for name,cls,kwargs in workers_desc:
             try:
-                print(kwargs)
                 widget = WidgetForProcess(process_class=cls, **kwargs)
                 self.toolBox.addItem(widget, name)
             except Exception as e:
