@@ -8,8 +8,8 @@ import os
 
 NO_OF_AXES = 4
 
-default_req_port = 7006
-default_pub_port = 7007
+default_req_port = 7016
+default_pub_port = 7017
 
 class DummyANC350Worker(DeviceWorker):
     def __init__(self, req_port=default_req_port, pub_port=default_pub_port, **kwargs):
@@ -45,23 +45,23 @@ class DummyANC350Worker(DeviceWorker):
         self.axesList = [0, 1, 2, 3]
         print("Following dummy axes are now enabled: ", self.axes())
 
-    @handler("ANC350", "axes")
+    @handler("DummyANC350", "axes")
     def axes(self):
         return self.axesList
 
-    @handler("ANC350", "disconnect")
+    @handler("DummyANC350", "disconnect")
     def disconnect(self):
         return 1
 
-    @handler("ANC350", "enableAxis")
+    @handler("DummyANC350", "enableAxis")
     def enableAxis(self, axis):
         return 1
 
-    @handler("ANC350", "disableAxis")
+    @handler("DummyANC350", "disableAxis")
     def disableAxis(self, axis):
         return 1
 
-    @handler("ANC350", "moveSteps")
+    @handler("DummyANC350", "moveSteps")
     def moveSteps(self, axis, steps):
         """Number of steps can be positive or negative"""
         s = 1 if steps > 0 else -1
@@ -69,16 +69,16 @@ class DummyANC350Worker(DeviceWorker):
             self.position[axis] += 0.63 * s
             time.sleep(0.01)
 
-    @handler("ANC350", "moveAbsolute")
+    @handler("DummyANC350", "moveAbsolute")
     def moveAbsolute(self, axis, target, wait=False):
         self.position[axis] = target
         self.moving[axis] = 0
 
-    @handler("ANC350", "stopMovement")
+    @handler("DummyANC350", "stopMovement")
     def stopMovement(self, axis):
         self.moving[axis] = 0
 
-    @handler("ANC350", "moveVelocity")
+    @handler("DummyANC350", "moveVelocity")
     def moveVelocity(self, axis, frequency):
         if frequency == 0:
             self.stopMovement(axis)
@@ -91,24 +91,24 @@ class DummyANC350Worker(DeviceWorker):
         self.setFrequency(axis, frequency)
         self.moving[axis] = 1
 
-    @handler("ANC350", "setFrequency")
+    @handler("DummyANC350", "setFrequency")
     def setFrequency(self, axis, frequency):
         self.frequency[axis] = frequency
 
-    @handler("ANC350", "moveContinous")
+    @handler("DummyANC350", "moveContinous")
     def moveContinous(self, axis, dir):
         self.direction[axis] = 1 - 2 * dir
         self.moving[axis] = 1
 
-    @handler("ANC350", "stopMovement")
+    @handler("DummyANC350", "stopMovement")
     def stopMovement(self, axis):
         self.moving[axis] = 0
 
-    @handler("ANC350", "axisPos")
+    @handler("DummyANC350", "axisPos")
     def axisPos(self, axis):
         return self.position[axis]
 
-    @handler("ANC350", "axisStatus")
+    @handler("DummyANC350", "axisStatus")
     def axisStatus(self, axis):
         return 1
 
@@ -117,7 +117,7 @@ class DummyANC350(DeviceOverZeroMQ):
 
     def __init__(self, req_port=default_req_port, pub_port=default_pub_port, **kwargs):
         super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
-        self.createDelegatedMethods("ANC350")
+        self.createDelegatedMethods("DummyANC350")
 
     def __del__(self):
         pass

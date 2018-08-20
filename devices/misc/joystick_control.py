@@ -105,6 +105,14 @@ class JoystickControlWidget(QtWidgets.QWidget):
         except Exception as e:
             print(e)
 
+        try:
+            from ..attocube.dummyanc350 import DummyANC350
+            for name, anc350 in {k: v for k, v in self.device_list.items() if isinstance(v, DummyANC350)}.items():
+                for axis in anc350.axes():
+                    self.slaves.append(_create_anc350_slave(anc350, name, axis))
+        except Exception as e:
+            print(e)
+
         self.refreshCombos()
 
     def _createWidgets(self):
