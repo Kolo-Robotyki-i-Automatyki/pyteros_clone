@@ -58,7 +58,8 @@ class DeviceOverZeroMQ(device.Device):
         def fun(self, *args):
             #print("internal: func: " + str(method_name))
             obj = (method_name, cls_name, args)
-            self.client.send_json(obj, cls=ArrayEncoder)
+            msg = json.dumps(obj, cls=ArrayEncoder).encode('ascii')
+            self.client.send(msg)
             
             
             socks = dict(self.poll.poll(self.request_timeout))
@@ -212,7 +213,8 @@ class DeviceWorker(Process):
             try:
                 f = delegated_methods_db[(request[1],request[0])]
                 args = request[2]
-                server.send_json(f(self,*args), cls=ArrayEncoder)
+                msg = json.dumps(f(self,*args), cls=ArrayEncoder).encode('ascii')
+                server.send(msg)
             except Exception as e:
                 print("Exception: ", str(e))
                 server.send_json("ERROR processing request")
