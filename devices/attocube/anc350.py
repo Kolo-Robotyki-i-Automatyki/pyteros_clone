@@ -1,7 +1,7 @@
 from PyQt5 import QtWidgets,QtCore
 
 import ctypes as ct
-from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,handler
+from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,remote,include_remote_methods
 from devices import Parameter
 from PyQt5 import QtWidgets, QtCore, QtGui
 import time
@@ -9,7 +9,6 @@ import time
 import os
 os.environ["PATH"] = \
            "C:\\pyLUMS\\devices\\attocube\\" + os.pathsep + os.environ["PATH"]
-attodll = ct.windll.LoadLibrary("hvpositionerv2.dll")
 
 default_req_port = 7006
 default_pub_port = 7007
@@ -40,6 +39,7 @@ class ANC350Worker(DeviceWorker):
     def __init__(self, req_port=default_req_port, pub_port=default_pub_port, **kwargs):
         super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
         self.connected = False
+        self.dll = ct.windll.LoadLibrary("hvpositionerv2.dll")
 
     def status(self):
         d = super().status()
@@ -54,18 +54,18 @@ class ANC350Worker(DeviceWorker):
         class positionerinfo(ct.Structure):
             _fields_ = [("id", ct.c_int32), ("locked", ct.c_bool)]
         mem = ct.POINTER(ct.POINTER(positionerinfo))()
-        count = attodll.PositionerCheck(ct.byref(mem))
+        count = self.dll.PositionerCheck(ct.byref(mem))
         if count < 1:
             return Exception("No Attocube controllers found", \
                                 "No ANC350 controllers found")
         self.handle = ct.c_int32()
-        ret = attodll.PositionerConnect(0, ct.byref(self.handle))
+        ret = self.dll.PositionerConnect(0, ct.byref(self.handle))
         if ret != 0:
             return Exception("Attocube:PositionerConnect", "Function failed")
         self.connected = True
 
         for axis in range(9):
-            attodll.PositionerStopDetection(self.handle, ct.c_int32(axis), \
+            self.dll.PositionerStopDetection(self.handle, ct.c_int32(axis), \
                                              ct.c_bool(False))
         time.sleep(0.5)
         self.axesList = []
@@ -76,28 +76,28 @@ class ANC350Worker(DeviceWorker):
                 self.axesList.append(axis)
         print("Following axes are now enabled: ", self.axes())
 
-    @handler("ANC350", "axes")
+    @remote
     def axes(self):
         return self.axesList
 
-    @handler("ANC350", "disconnect")
+    @remote
     def disconnect(self):
         if not self.connected:
             return
         for i in range(3):
             self.disableAxis(i)
-        attodll.PositionerClose(self.handle)
+        self.dll.PositionerClose(self.handle)
         self.connected = False
 
-    @handler("ANC350", "enableAxis")
+    @remote
     def enableAxis(self, axis):
-        attodll.PositionerSetOutput(self.handle, ct.c_int32(axis), True)
+        self.dll.PositionerSetOutput(self.handle, ct.c_int32(axis), True)
 
-    @handler("ANC350", "disableAxis")
+    @remote
     def disableAxis(self, axis):
-        attodll.PositionerSetOutput(self.handle, ct.c_int32(axis), False)
+        self.dll.PositionerSetOutput(self.handle, ct.c_int32(axis), False)
 
-    @handler("ANC350", "moveSteps")
+    @remote
     def moveSteps(self, axis, steps):
         """Number of steps can be positive or negative"""
         d = ct.c_int32(0 if steps > 0 else 1)
@@ -105,16 +105,16 @@ class ANC350Worker(DeviceWorker):
             self.dll.PositionerMoveSingleStep(self.handle, ct.c_int32(axis), d)
             time.sleep(0.01)
 
-    @handler("ANC350", "moveAbsolute")
+    @remote
     def moveAbsolute(self, axis, target, wait=False):
-        attodll.PositionerMoveAbsolute(self.handle, ct.c_int32(axis), \
+        self.dll.PositionerMoveAbsolute(self.handle, ct.c_int32(axis), \
                                         ct.c_int32(target*1000), ct.c_int32(0))
 
-    @handler("ANC350", "stopMovement")
+    @remote
     def stopMovement(self, axis):
-        attodll.PositionerStopMoving(self.handle, ct.c_int32(axis))
+        self.dll.PositionerStopMoving(self.handle, ct.c_int32(axis))
 
-    @handler("ANC350", "moveVelocity")
+    @remote
     def moveVelocity(self, axis, frequency):
         if frequency == 0:
             self.stopMovement(axis)
@@ -125,47 +125,46 @@ class ANC350Worker(DeviceWorker):
             dir = 1
         else:
             dir = 0
-        attodll.PositionerFrequency(self.handle, ct.c_int32(axis), ct.c_int32(frequency))
+        self.dll.PositionerFrequency(self.handle, ct.c_int32(axis), ct.c_int32(frequency))
         if 1 - 2 * dir != self.axisDirection[axis]:
-            attodll.PositionerMoveContinuous(self.handle, ct.c_int32(axis), ct.c_int32(dir))
+            self.dll.PositionerMoveContinuous(self.handle, ct.c_int32(axis), ct.c_int32(dir))
         self.axisDirection[axis] = 1 - 2 * dir
 
-    @handler("ANC350", "setFrequency")
+    @remote
     def setFrequency(self, axis, frequency):
-        attodll.PositionerFrequency(self.handle, ct.c_int32(axis), ct.c_int32(frequency))
+        self.dll.PositionerFrequency(self.handle, ct.c_int32(axis), ct.c_int32(frequency))
 
-    @handler("ANC350", "moveContinous")
+    @remote
     def moveContinous(self, axis, dir):
-        attodll.PositionerMoveContinuous(self.handle, ct.c_int32(axis), ct.c_int32(dir))
+        self.dll.PositionerMoveContinuous(self.handle, ct.c_int32(axis), ct.c_int32(dir))
 
-    @handler("ANC350", "stopMovement")
+    @remote
     def stopMovement(self, axis):
-        attodll.PositionerStopMoving(self.handle, ct.c_int32(axis))
+        self.dll.PositionerStopMoving(self.handle, ct.c_int32(axis))
 
-    @handler("ANC350", "axisPos")
+    @remote
     def axisPos(self, axis):
         if not self.connected:
             return 0
         pos = ct.c_int32()
-        attodll.PositionerGetPosition(self.handle, ct.c_int32(axis), \
+        self.dll.PositionerGetPosition(self.handle, ct.c_int32(axis), \
                                       ct.byref(pos))
         return pos.value / 1000.
 
-    @handler("ANC350", "axisStatus")
+    @remote
     def axisStatus(self, axis):
         if not self.connected:
             return 0
         status = ct.c_int32()
-        attodll.PositionerGetStatus(self.handle, ct.c_int32(axis), \
+        self.dll.PositionerGetStatus(self.handle, ct.c_int32(axis), \
                                        ct.byref(status))
         return status.value
 
-
+@include_remote_methods(ANC350Worker)
 class ANC350(DeviceOverZeroMQ):
 
     def __init__(self, req_port=default_req_port, pub_port=default_pub_port, **kwargs):
         super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
-        self.createDelegatedMethods("ANC350")
 
     def __del__(self):
         pass

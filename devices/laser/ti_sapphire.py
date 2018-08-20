@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,handler
+from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,remote,include_remote_methods
 from PyQt5 import QtWidgets,QtCore
 from PyQt5.QtWidgets import (QPushButton, QMessageBox, QDialog)
 from PyQt5.QtWidgets import (QApplication, QWidget, QMainWindow)
@@ -32,35 +32,34 @@ class TiSapphireWorker(DeviceWorker):
         return d
 
         
-    @handler("TiSapphireMotor", "sf")
+    @remote
     def sf(self):
         '''Method sets motor fixing at 0'''
         self.ser.write(b'sf0\n')
         
-    @handler("TiSapphireMotor", "tf")
+    @remote
     def tf(self):
         '''Method returns current fixing'''
         self.ser.write(b'tf\n')
         self.response = self.ser.readline()
         return self.response
 
-    @handler("TiSapphireMotor", "goto")
+    @remote
     def goto(self, position):
         '''Motor moves to absolute position which is the method argument'''
         self.ser.write(b'ma' + str(position).encode('ascii') + b'\n')
         
-    @handler("TiSapphireMotor", "whereareyou")
+    @remote
     def whereareyou(self):
         '''Method returns current absolute position of the motor'''
         self.ser.write(b'tp\n')
         self.ret = self.ser.readline()
         return self.ret
     
-    
+@include_remote_methods(TiSapphireWorker)
 class TiSapphire(DeviceOverZeroMQ):  
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.createDelegatedMethods("TiSapphireMotor")
                
     def createDock(self, parentWidget, menu=None):
         """ Function for integration in GUI app. Implementation below 

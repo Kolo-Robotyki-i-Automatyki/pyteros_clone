@@ -21,7 +21,7 @@ from operator import itemgetter, attrgetter
 from itertools import count
 import json
 
-from ..zeromq_device import DeviceWorker,DeviceOverZeroMQ,handler
+from ..zeromq_device import DeviceWorker,DeviceOverZeroMQ,remote,include_remote_methods
 
 # structs according to
 # http://msdn.microsoft.com/en-gb/library/windows/desktop/ee417001%28v=vs.85%29.aspx
@@ -158,11 +158,11 @@ class XBoxWorker(DeviceWorker):
                 "Unknown error %d attempting to get state of device %d" % (res, self.device_number))
         # else return None (device is not connected)
 
-    @handler("XBox", "isConnected")
+    @remote
     def is_connected(self):
         return self._last_state is not None
 
-    @handler("XBox", "setVibration")
+    @remote
     def set_vibration(self, left_motor, right_motor):
         "Control the speed of both motors seperately"
         # Set up function argument types and return type
@@ -254,7 +254,7 @@ class XBoxWorker(DeviceWorker):
         self._last_state = state
         return d
 
-    @handler("XBox", "currentStatus")
+    @remote
     def currentStatus(self):
         return self.status()
 
@@ -297,11 +297,10 @@ def sample_first_joystick():
 
 
 
-
+@include_remote_methods(XBoxWorker)
 class XBoxPad(DeviceOverZeroMQ):
     def __init__(self, req_port = default_req_port, pub_port = default_pub_port, **kwargs):
         super().__init__(req_port = req_port, pub_port = pub_port, **kwargs)
-        self.createDelegatedMethods("XBox")
 
 
     def createDock(self, parentWidget, menu = None):

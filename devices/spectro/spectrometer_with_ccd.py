@@ -2,9 +2,9 @@
 """
 """
 
-from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,handler
 from .spectrometer import *
 from PyQt5 import QtWidgets,QtCore
+import numpy as np
 
 class SpectrometerWithCCDWorker(SpectrometerWorker):
     
