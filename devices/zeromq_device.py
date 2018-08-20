@@ -39,7 +39,7 @@ def array_object_hook(d):
 
 class DeviceOverZeroMQ(device.Device):
     def __init__(self, req_port, pub_port=None, host="localhost"):           
-        self.thread = None
+        self.thread = {}
         self.channel = "tcp://"+host+":"+str(req_port)
         self.client = context.socket(zmq.REQ)
         self.client.connect(self.channel)
@@ -86,13 +86,13 @@ class DeviceOverZeroMQ(device.Device):
     class ZeroMQ_Listener(QtCore.QObject):
         message = QtCore.pyqtSignal(object)
         
-        def __init__(self,channel):
+        def __init__(self,channel, topic):
             QtCore.QObject.__init__(self)
             
             self.socket = context.socket(zmq.SUB)
             print(channel)
             self.socket.connect (channel)
-            self.socket.setsockopt(zmq.SUBSCRIBE, b'status')
+            self.socket.setsockopt(zmq.SUBSCRIBE, topic)
              
             self.running = True
          
@@ -102,17 +102,18 @@ class DeviceOverZeroMQ(device.Device):
                 status = json.loads(msg, object_hook=array_object_hook)
                 self.message.emit(status)
             
-    def createListenerThread(self, updateSlot):
+    def createListenerThread(self, updateSlot, topic=b'status'):
         if not self.pub_channel:
             print("Error: no PUB port given")
             return
-        if not self.thread:
-            self.thread = QtCore.QThread()
-            self.zeromq_listener = DeviceOverZeroMQ.ZeroMQ_Listener(self.pub_channel)
-            self.zeromq_listener.moveToThread(self.thread)
-            self.thread.started.connect(self.zeromq_listener.loop)
-            QtCore.QTimer.singleShot(0, self.thread.start)
-        self.zeromq_listener.message.connect(updateSlot)
+        if topic not in self.thread:
+            thread = QtCore.QThread()
+            zeromq_listener = DeviceOverZeroMQ.ZeroMQ_Listener(self.pub_channel, topic)
+            zeromq_listener.moveToThread(thread)
+            thread.started.connect(zeromq_listener.loop)
+            QtCore.QTimer.singleShot(0, thread.start)
+            self.thread[topic] = (thread, zeromq_listener)
+        self.thread[topic][1].message.connect(updateSlot)
         
         
 from multiprocessing import Process
@@ -139,13 +140,16 @@ def reminderFunc(context,req_channel,rate=0.1):
 
 
 class Logger():
-    def __init__(self, socket, stream="out"):
+    def __init__(self, socket, mutex, stream="out"):
         self.socket = socket
         self.envelope = stream.encode('ascii')
+        self.mutex_for_pubchannel = mutex
 
     def write(self, buf):
         for line in buf.rstrip().splitlines():
+            self.mutex_for_pubchannel.lock()
             self.socket.send_multipart([self.envelope, line.rstrip().encode('ascii')])
+            self.mutex_for_pubchannel.unlock()
 
     def flush(self):
         pass
@@ -157,6 +161,7 @@ class DeviceWorker(Process):
         self.PUBchannel = "tcp://*:" + str(pub_port)
         self.rep_channel = "tcp://localhost:"+str(req_port)
         self.refresh_rate = refresh_rate
+        self.mutex_for_pubchannel = QtCore.QMutex()
         super().__init__()
 
     @handler("DeviceWorker", "status")
@@ -165,6 +170,12 @@ class DeviceWorker(Process):
 
     def init_device(self):
         pass
+
+    def send_via_pubchannel(self, topic, obj):
+        msg = json.dumps(obj, cls=ArrayEncoder).encode('ascii')
+        self.mutex_for_pubchannel.lock()
+        notifier.send_multipart([topic, msg])
+        self.mutex_for_pubchannel.unlock()
 
     def run(self):
         print("starting process")
@@ -176,8 +187,8 @@ class DeviceWorker(Process):
         notifier.bind(self.PUBchannel)
         
         import sys
-        sys.stdout = Logger(notifier, "stdout")
-        sys.stderr = Logger(notifier, "stderr")
+        sys.stdout = Logger(notifier, self.mutex_for_pubchannel, "stdout")
+        sys.stderr = Logger(notifier, self.mutex_for_pubchannel, "stderr")
         time.sleep(0.5)
         
         reminderThread = threading.Thread(target=reminderFunc,
@@ -193,7 +204,9 @@ class DeviceWorker(Process):
             if request[0] == "status":
                 msg = json.dumps(self.status(), cls=ArrayEncoder).encode('ascii')
                 server.send(msg)
+                self.mutex_for_pubchannel.lock()
                 notifier.send_multipart([b"status", msg])
+                self.mutex_for_pubchannel.unlock()
                 continue
             
             try:
