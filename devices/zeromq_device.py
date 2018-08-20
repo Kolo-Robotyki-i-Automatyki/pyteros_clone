@@ -23,7 +23,7 @@ class ArrayEncoder(json.JSONEncoder):
         if isinstance(obj, np.ndarray):
             return {"dtype": obj.dtype.str,
                     "shape": obj.shape,
-                    "data": base64.b64encode(obj.tobytes()).decode('ascii')}
+                    "data": base64.b64encode(obj.tostring()).decode('ascii')}
         # Let the base class default method raise the TypeError
         return json.JSONEncoder.default(self, obj)
 
@@ -161,7 +161,6 @@ class DeviceWorker(Process):
         self.PUBchannel = "tcp://*:" + str(pub_port)
         self.rep_channel = "tcp://localhost:"+str(req_port)
         self.refresh_rate = refresh_rate
-        self.mutex_for_pubchannel = QtCore.QMutex()
         super().__init__()
 
     @handler("DeviceWorker", "status")
@@ -174,21 +173,22 @@ class DeviceWorker(Process):
     def send_via_pubchannel(self, topic, obj):
         msg = json.dumps(obj, cls=ArrayEncoder).encode('ascii')
         self.mutex_for_pubchannel.lock()
-        notifier.send_multipart([topic, msg])
+        self.notifier.send_multipart([topic, msg])
         self.mutex_for_pubchannel.unlock()
 
     def run(self):
         print("starting process")
+        self.mutex_for_pubchannel = QtCore.QMutex()
         context = zmq.Context(1)
         server = context.socket(zmq.REP)
         server.bind(self.REQchannel)
         
-        notifier = context.socket(zmq.PUB)
-        notifier.bind(self.PUBchannel)
+        self.notifier = context.socket(zmq.PUB)
+        self.notifier.bind(self.PUBchannel)
         
         import sys
-        sys.stdout = Logger(notifier, self.mutex_for_pubchannel, "stdout")
-        sys.stderr = Logger(notifier, self.mutex_for_pubchannel, "stderr")
+        sys.stdout = Logger(self.notifier, self.mutex_for_pubchannel, "stdout")
+        sys.stderr = Logger(self.notifier, self.mutex_for_pubchannel, "stderr")
         time.sleep(0.5)
         
         reminderThread = threading.Thread(target=reminderFunc,
@@ -205,7 +205,7 @@ class DeviceWorker(Process):
                 msg = json.dumps(self.status(), cls=ArrayEncoder).encode('ascii')
                 server.send(msg)
                 self.mutex_for_pubchannel.lock()
-                notifier.send_multipart([b"status", msg])
+                self.notifier.send_multipart([b"status", msg])
                 self.mutex_for_pubchannel.unlock()
                 continue
             
