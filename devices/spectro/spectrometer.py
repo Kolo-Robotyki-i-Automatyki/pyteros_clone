@@ -20,7 +20,7 @@ class SpectrometerWorker(DeviceWorker):
         d = super().status()
         d["cooler"] = self.get_cooler_state()
         d["temperature"] = self.get_temperature()
-        d["status"] = self.status()
+        d["status"] = self.acquisition_status()
         lambda_min,lambda_center,lambda_max = self.get_wavelength()
         d["wavelength"] = lambda_center
         exposure,num = self.get_exposure_time()
@@ -127,6 +127,14 @@ class Spectrometer(DeviceOverZeroMQ):
         layout3.addWidget(QtWidgets.QLabel("Wavelength:"))
         self.input_wavelength = QtWidgets.QLineEdit()
         layout3.addWidget(self.input_wavelength)        
+        
+        self.start_button = QtWidgets.QPushButton("Start")
+        layout3.addWidget(self.start_button)
+        self.start_button.clicked.connect(self.start_acquisition)
+        
+        self.get_button = QtWidgets.QPushButton("Retrieve")
+        layout3.addWidget(self.get_button)
+        self.get_button.clicked.connect(self.get_latest_data)
         
         dock.setWidget(widget)
         dock.setAllowedAreas(QtCore.Qt.TopDockWidgetArea | QtCore.Qt.BottomDockWidgetArea)
