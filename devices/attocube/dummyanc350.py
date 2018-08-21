@@ -1,6 +1,6 @@
 from PyQt5 import QtWidgets,QtCore
 
-from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,handler
+from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,remote,include_remote_methods
 from PyQt5 import QtWidgets, QtCore, QtGui
 import time
 
@@ -45,6 +45,7 @@ class DummyANC350Worker(DeviceWorker):
         self.axesList = [0, 1, 2, 3]
         print("Following dummy axes are now enabled: ", self.axes())
 
+<<<<<<< HEAD
     @handler("DummyANC350", "axes")
     def axes(self):
         return self.axesList
@@ -62,6 +63,20 @@ class DummyANC350Worker(DeviceWorker):
         return 1
 
     @handler("DummyANC350", "moveSteps")
+=======
+    def axes(self):
+        return self.axesList
+
+    def disconnect(self):
+        return 1
+
+    def enableAxis(self, axis):
+        return 1
+
+    def disableAxis(self, axis):
+        return 1
+
+>>>>>>> d6245cc42806565f328304e42acffeda3dc03f82
     def moveSteps(self, axis, steps):
         """Number of steps can be positive or negative"""
         s = 1 if steps > 0 else -1
@@ -69,16 +84,25 @@ class DummyANC350Worker(DeviceWorker):
             self.position[axis] += 0.63 * s
             time.sleep(0.01)
 
+<<<<<<< HEAD
     @handler("DummyANC350", "moveAbsolute")
+=======
+>>>>>>> d6245cc42806565f328304e42acffeda3dc03f82
     def moveAbsolute(self, axis, target, wait=False):
         self.position[axis] = target
         self.moving[axis] = 0
 
+<<<<<<< HEAD
     @handler("DummyANC350", "stopMovement")
     def stopMovement(self, axis):
         self.moving[axis] = 0
 
     @handler("DummyANC350", "moveVelocity")
+=======
+    def stopMovement(self, axis):
+        self.moving[axis] = 0
+
+>>>>>>> d6245cc42806565f328304e42acffeda3dc03f82
     def moveVelocity(self, axis, frequency):
         if frequency == 0:
             self.stopMovement(axis)
@@ -91,15 +115,22 @@ class DummyANC350Worker(DeviceWorker):
         self.setFrequency(axis, frequency)
         self.moving[axis] = 1
 
+<<<<<<< HEAD
     @handler("DummyANC350", "setFrequency")
     def setFrequency(self, axis, frequency):
         self.frequency[axis] = frequency
 
     @handler("DummyANC350", "moveContinous")
+=======
+    def setFrequency(self, axis, frequency):
+        self.frequency[axis] = frequency
+
+>>>>>>> d6245cc42806565f328304e42acffeda3dc03f82
     def moveContinous(self, axis, dir):
         self.direction[axis] = 1 - 2 * dir
         self.moving[axis] = 1
 
+<<<<<<< HEAD
     @handler("DummyANC350", "stopMovement")
     def stopMovement(self, axis):
         self.moving[axis] = 0
@@ -189,6 +220,16 @@ class DummyANC350(DeviceOverZeroMQ):
             self.axis_widgets[axis][0].setText("%4.2f" % status["axis%d_pos" % axis])
             #print(status["axis%d_pos" % axis])
             
+=======
+    def stopMovement(self, axis):
+        self.moving[axis] = 0
+
+    def axisPos(self, axis):
+        return self.position[axis]
+
+    def axisStatus(self, axis):
+        return 1
+>>>>>>> d6245cc42806565f328304e42acffeda3dc03f82
             
         
 if __name__ == '__main__':

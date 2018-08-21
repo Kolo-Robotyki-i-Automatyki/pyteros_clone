@@ -7,15 +7,48 @@ from . import device
 import numpy as np
 import base64
 
-delegated_methods_db = {}
-def handler(cls,name):
-    def decorator(fn):
-        delegated_methods_db[(cls,name)] = fn
-        return fn
+
+def remote(func):
+    """ Decorator for methods that should be available over the Ethernet"""
+    func.accessible_remotely = True
+    return func
+
+
+def _makeFun(method_name):
+    def fun(self, *args, **kwargs):
+        obj = (method_name, args, kwargs)
+        msg = json.dumps(obj, cls=ArrayEncoder).encode('ascii')
+        self.client.send(msg)
+        
+        socks = dict(self.poll.poll(self.request_timeout))
+        if socks.get(self.client) == zmq.POLLIN:
+            return self.client.recv_json(object_hook=array_object_hook)
+        else:
+            # Timeout. 
+            # Socket is confused. Close and reopen to reset its state.
+            self.client.setsockopt(zmq.LINGER, 0)
+            self.client.close()
+            self.poll.unregister(self.client)
+            self.client = context.socket(zmq.REQ)
+            self.client.connect(self.channel)
+            self.poll.register(self.client, zmq.POLLIN)
+            raise ConnectionError
+    return fun
+
+def include_remote_methods(worker_class):
+    """ Decorator for class to import methods with @remote decorator """
+    def decorator(frontend_class):
+        for name in dir(worker_class):
+            try:
+                if getattr(worker_class,name).accessible_remotely:
+                    setattr(frontend_class, name, _makeFun(name))
+            except:
+                pass
+        return frontend_class
     return decorator
 
-context = zmq.Context()
 
+context = zmq.Context()
 
 
 class ArrayEncoder(json.JSONEncoder):
@@ -37,84 +70,6 @@ def array_object_hook(d):
         return d
 
 
-class DeviceOverZeroMQ(device.Device):
-    def __init__(self, req_port, pub_port=None, host="localhost"):           
-        self.thread = {}
-        self.channel = "tcp://"+host+":"+str(req_port)
-        self.client = context.socket(zmq.REQ)
-        self.client.connect(self.channel)
-        self.poll = zmq.Poller()
-        self.poll.register(self.client, zmq.POLLIN)
-        self.request_timeout = 2000 # 2s in milliseconds
-        if pub_port:
-            self.pub_channel = "tcp://"+host+":"+str(pub_port)
-        else:
-            self.pub_channel = None
-        self.createDelegatedMethods("DeviceWorker")
-        
-        
-
-    def _makeFun(self, cls_name, method_name):
-        def fun(self, *args):
-            #print("internal: func: " + str(method_name))
-            obj = (method_name, cls_name, args)
-            self.client.send_json(obj, cls=ArrayEncoder)
-            
-            
-            socks = dict(self.poll.poll(self.request_timeout))
-            if socks.get(self.client) == zmq.POLLIN:
-                return self.client.recv_json(object_hook=array_object_hook)
-            else:
-                # Timeout. 
-                # Socket is confused. Close and reopen to reset its state.
-                self.client.setsockopt(zmq.LINGER, 0)
-                self.client.close()
-                self.poll.unregister(self.client)
-                self.client = context.socket(zmq.REQ)
-                self.client.connect(self.channel)
-                self.poll.register(self.client, zmq.POLLIN)
-                raise ConnectionError
-                
-        return fun
-        
-
-    def createDelegatedMethods(self, name):
-        for (cls, method_name) in delegated_methods_db:
-            if cls == name:
-                setattr(self.__class__, method_name, self._makeFun(cls,method_name))
-    
-    class ZeroMQ_Listener(QtCore.QObject):
-        message = QtCore.pyqtSignal(object)
-        
-        def __init__(self,channel, topic):
-            QtCore.QObject.__init__(self)
-            
-            self.socket = context.socket(zmq.SUB)
-            print(channel)
-            self.socket.connect (channel)
-            self.socket.setsockopt(zmq.SUBSCRIBE, topic)
-             
-            self.running = True
-         
-        def loop(self):
-            while self.running:
-                msg = self.socket.recv_multipart()[1].decode('ascii')
-                status = json.loads(msg, object_hook=array_object_hook)
-                self.message.emit(status)
-            
-    def createListenerThread(self, updateSlot, topic=b'status'):
-        if not self.pub_channel:
-            print("Error: no PUB port given")
-            return
-        if topic not in self.thread:
-            thread = QtCore.QThread()
-            zeromq_listener = DeviceOverZeroMQ.ZeroMQ_Listener(self.pub_channel, topic)
-            zeromq_listener.moveToThread(thread)
-            thread.started.connect(zeromq_listener.loop)
-            QtCore.QTimer.singleShot(0, thread.start)
-            self.thread[topic] = (thread, zeromq_listener)
-        self.thread[topic][1].message.connect(updateSlot)
-        
         
 from multiprocessing import Process
 
@@ -163,7 +118,7 @@ class DeviceWorker(Process):
         self.refresh_rate = refresh_rate
         super().__init__()
 
-    @handler("DeviceWorker", "status")
+    @remote
     def status(self):
         return {}
 
@@ -210,9 +165,12 @@ class DeviceWorker(Process):
                 continue
             
             try:
-                f = delegated_methods_db[(request[1],request[0])]
-                args = request[2]
-                server.send_json(f(self,*args), cls=ArrayEncoder)
+                f = getattr(self, request[0])
+                args = request[1]
+                kwargs = request[2]
+                result = f(*args, **kwargs)
+                msg = json.dumps(result, cls=ArrayEncoder).encode('ascii')
+                server.send(msg)
             except Exception as e:
                 print("Exception: ", str(e))
                 server.send_json("ERROR processing request")
@@ -223,4 +181,51 @@ class DeviceWorker(Process):
         reminderThread.join()
         context.term()
         print("finally the whole process quits")
+
+
+@include_remote_methods(DeviceWorker)
+class DeviceOverZeroMQ(device.Device):
+    def __init__(self, req_port, pub_port=None, host="localhost"):           
+        self.thread = {}
+        self.channel = "tcp://"+host+":"+str(req_port)
+        self.client = context.socket(zmq.REQ)
+        self.client.connect(self.channel)
+        self.poll = zmq.Poller()
+        self.poll.register(self.client, zmq.POLLIN)
+        self.request_timeout = 2000 # 2s in milliseconds
+        if pub_port:
+            self.pub_channel = "tcp://"+host+":"+str(pub_port)
+        else:
+            self.pub_channel = None
     
+    class ZeroMQ_Listener(QtCore.QObject):
+        message = QtCore.pyqtSignal(object)
+        
+        def __init__(self,channel, topic):
+            QtCore.QObject.__init__(self)
+            
+            self.socket = context.socket(zmq.SUB)
+            print(channel)
+            self.socket.connect (channel)
+            self.socket.setsockopt(zmq.SUBSCRIBE, topic)
+             
+            self.running = True
+         
+        def loop(self):
+            while self.running:
+                msg = self.socket.recv_multipart()[1].decode('ascii')
+                status = json.loads(msg, object_hook=array_object_hook)
+                self.message.emit(status)
+            
+    def createListenerThread(self, updateSlot, topic=b'status'):
+        if not self.pub_channel:
+            print("Error: no PUB port given")
+            return
+        if topic not in self.thread:
+            thread = QtCore.QThread()
+            zeromq_listener = DeviceOverZeroMQ.ZeroMQ_Listener(self.pub_channel, topic)
+            zeromq_listener.moveToThread(thread)
+            thread.started.connect(zeromq_listener.loop)
+            QtCore.QTimer.singleShot(0, thread.start)
+            self.thread[topic] = (thread, zeromq_listener)
+        self.thread[topic][1].message.connect(updateSlot)

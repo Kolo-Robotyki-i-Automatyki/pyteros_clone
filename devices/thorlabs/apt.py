@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 
-from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,handler
+from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,remote,include_remote_methods
 from devices import Parameter
 from PyQt5 import QtWidgets,QtCore
 import time
@@ -70,18 +70,18 @@ class APTWorker(DeviceWorker):
                  "stopped":  not motor.is_in_motion }
         return d
 
-    @handler("APT", "moveTo")
+    @remote
     def moveTo(self, serial, target):
         mot = self.motors[serial]
         self.wait(mot)
         mot.set_velocity_parameters(*mot.initial_parameters)
         mot.move_to(target)
 
-    @handler("APT", "devices")
+    @remote
     def devices(self):
         return [sn for sn in self.motors]
 
-    @handler("APT", "moveVelocity")
+    @remote
     def moveVelocity(self, serial, velocity):
         if velocity == 0:
             return self.stop(serial)
@@ -92,29 +92,29 @@ class APTWorker(DeviceWorker):
         direction = 1 if velocity > 0 else 2
         mot.move_velocity(direction)
 
-    @handler("APT", "stop")
+    @remote
     def stop(self, serial):
         mot = self.motors[serial]
         self.wait(mot)
         mot.set_velocity_parameters(*mot.initial_parameters)
         mot.stop_profiled()
 
-    @handler("APT", "position")
+    @remote
     def position(self, serial):
         mot = self.motors[serial]
         self.wait(mot)
         return mot.position
 
-    @handler("APT", "isStopped")
+    @remote
     def isStopped(self, serial):
         mot = self.motors[serial]
         return not mot.is_in_motion
 
 
+@include_remote_methods(APTWorker)
 class APT(DeviceOverZeroMQ):
     def __init__(self, req_port = default_req_port, pub_port = default_pub_port, **kwargs):
         super().__init__(req_port = req_port, pub_port = pub_port, **kwargs)
-        self.createDelegatedMethods("APT")
         # custom initialization here
         self.widgets = {}
 

@@ -8,7 +8,7 @@ Communication between both parts is done by means of ZeroMQ protocol, which
 means that both parts can potentially work on different hosts.
 """
 
-from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,handler
+from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,remote,include_remote_methods
 from PyQt5 import QtWidgets,QtCore
 
 class WorkerForDummyDevice(DeviceWorker):
@@ -18,8 +18,7 @@ class WorkerForDummyDevice(DeviceWorker):
         super().__init__(*args, **kwargs)
         # custom initialization here
         self.voltage = 0.2
-        
-        
+            
     def init_device(self):
         """ This function will be called once upon starting the process """
         print("Dummy device initialized")
@@ -35,33 +34,31 @@ class WorkerForDummyDevice(DeviceWorker):
         print(d)
         return d
     
-    @handler("Demo", "setVoltage")
+    @remote
     def setVoltage(self, v):
-        """ Use @handler decorator for functions to expose them to the 
-        front-end. For each argument you need to specify a function to convert
-        it from string"""
+        """ Use @remote decorator for functions to expose them to the 
+        front-end. """
         print("setVoltage is performed by "+str(self.__class__)+" object")
         self.voltage = v
         
-    @handler("Demo", "incVoltage")
+    @remote
     def incVoltage(self):
         print("incVoltage is performed by "+str(self.__class__)+" object")
         self.voltage += 1
         
-    @handler("Demo", "getVoltage")
+    @remote
     def getVoltage(self):
         print("getVoltage is performed by "+str(self.__class__)+" object")
         return self.voltage
     
     
     
-    
+@include_remote_methods(WorkerForDummyDevice)
 class FrontEndForDummyDevice(DeviceOverZeroMQ):
     """ Simple stub for the class to be accessed by the user """
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.createDelegatedMethods("Demo")
         
         
     def createDock(self, parentWidget, menu=None):

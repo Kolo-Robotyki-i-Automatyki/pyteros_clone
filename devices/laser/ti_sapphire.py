@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,handler
+from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,remote,include_remote_methods
 from PyQt5 import QtWidgets,QtCore
 from PyQt5.QtWidgets import (QPushButton, QMessageBox, QDialog)
 from PyQt5.QtWidgets import (QApplication, QWidget, QMainWindow)
@@ -15,7 +15,7 @@ class TiSapphireWorker(DeviceWorker):
         
     def init_device(self):
         import serial
-        self.ser = serial.Serial('COM3', 9600, timeout=5)  #opens serial port COM3
+        self.ser = serial.Serial('COM6', 9600, timeout=5)  #opens serial port COM3
         
     def __del__(self):
         self.ser.close() #serial port close
@@ -27,40 +27,38 @@ class TiSapphireWorker(DeviceWorker):
         front-end class."""
         d = super().status()
         d["connected"] = True
-        d["voltage"] = self.voltage
         print(d)
         return d
 
         
-    @handler("TiSapphireMotor", "sf")
+    @remote
     def sf(self):
         '''Method sets motor fixing at 0'''
         self.ser.write(b'sf0\n')
         
-    @handler("TiSapphireMotor", "tf")
+    @remote
     def tf(self):
         '''Method returns current fixing'''
         self.ser.write(b'tf\n')
         self.response = self.ser.readline()
-        return self.response
+        return self.response.decode('ascii')
 
-    @handler("TiSapphireMotor", "goto")
+    @remote
     def goto(self, position):
         '''Motor moves to absolute position which is the method argument'''
         self.ser.write(b'ma' + str(position).encode('ascii') + b'\n')
         
-    @handler("TiSapphireMotor", "whereareyou")
+    @remote
     def whereareyou(self):
         '''Method returns current absolute position of the motor'''
         self.ser.write(b'tp\n')
         self.ret = self.ser.readline()
-        return self.ret
+        return self.ret.decode('ascii')
     
-    
+@include_remote_methods(TiSapphireWorker)
 class TiSapphire(DeviceOverZeroMQ):  
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.createDelegatedMethods("TiSapphireMotor")
                
     def createDock(self, parentWidget, menu=None):
         """ Function for integration in GUI app. Implementation below 
@@ -82,7 +80,7 @@ class TiSapphire(DeviceOverZeroMQ):
     def updateSlot(self, status):
         pass
     
-    def initUI(self, widget, motor):
+    def initUI(self, widget):
         title = '<center><h2>Hello!<\h2><\center>'
         intro = '<center><font-size = "14">My name is titanium-sapphire laser.<br> I am able to emit light of 710-800 nm. <br> Press start to commence our adventure.<br><\font>'
 

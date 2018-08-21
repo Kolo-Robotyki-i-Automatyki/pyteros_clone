@@ -4,7 +4,7 @@ Spectrometer class represents a typical spectrometer, such as an OceanOptics
 device, or a Czerny-Turner monochromator with a CCD.
 """
 
-from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,handler
+from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,remote,include_remote_methods
 from PyQt5 import QtWidgets,QtCore
 import numpy as np
 
@@ -28,67 +28,66 @@ class SpectrometerWorker(DeviceWorker):
         d["number"] = num
         return d
     
-    @handler("Spectrometer", "set_cooler")
+    @remote
     def set_cooler(self, state):
         """ state is True or False """
         pass
     
-    @handler("Spectrometer", "get_cooler_state")
+    @remote
     def get_cooler_state(self):
         return True
     
-    @handler("Spectrometer", "get_temperature")
+    @remote
     def get_temperature(self):
         return np.nan
         
-    @handler("Spectrometer", "set_exposure_time")
+    @remote
     def set_exposure(self, exp_time, number):
         pass
     
-    @handler("Spectrometer", "get_exposure_time")
+    @remote
     def get_exposure_time(self):
         """ Returns a tuple with exposure time (in seconds) and number of 
         accumulations """
         return (0, 1)
     
-    @handler("Spectrometer", "start_acquisition")
+    @remote
     def start_acquisition(self, continuous=False):
         pass
     
-    @handler("Spectrometer", "acquisition_status")
+    @remote
     def acquisition_status(self):
         """ Returns one of following strings: 'running', 'idle'"""
         return 'idle'
         
-    @handler("Spectrometer", "get_latest_data")
+    @remote
     def get_latest_data(self):
         """ Returns the last measured data either as 1D or 2D array.
         The first dimension should be the same """
         return 
     
-    @handler("Spectrometer", "get_measurement_time")
+    @remote
     def get_measurement_time(self):
         """ Returns estimated time (in seconds) of the whole measurement.
         Usually it is close to the exposure time, but could be significantly
         longer in step&glue mode"""
         return 0
     
-    @handler("Spectrometer", "set_wavelength")
+    @remote
     def set_wavelength(self, wavelength):
         pass
     
-    @handler("Spectrometer", "get_wavelength")
+    @remote
     def get_wavelength(self):
         """ Returns a tuple (lambda_min, lambda_center, lambda_max)"""
         return (-10,0,10)
     
     
-    
+@include_remote_methods(SpectrometerWorker)    
 class Spectrometer(DeviceOverZeroMQ):
   
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.createDelegatedMethods("Spectrometer")
         
         
     def createDock(self, parentWidget, menu=None):
