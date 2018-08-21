@@ -2,15 +2,15 @@
 import scipy as sp
 from scipy import optimize
 import math
-from PyQt5 import QtWidgets,QtGui,QtCore,QtSvg
+from PyQt5 import QtWidgets, QtGui, QtCore, QtSvg
 from collections import OrderedDict
 import jsonpickle
 
 
 class ZoomableGraphicsView(QtWidgets.QGraphicsView):
-    def __init__ (self, parent=None):
-        super().__init__ (parent)
-        #self.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # self.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
         self.setMouseTracking(True)
         self.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
         self.setResizeAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
@@ -27,9 +27,9 @@ class ZoomableGraphicsView(QtWidgets.QGraphicsView):
         self.arrow_navigation_interval = 25
         self.arrow_navigation_timer.setInterval(self.arrow_navigation_interval)
         self.arrow_navigation_timer.start()
-        #self.resizeEvent.connect(self.refresh_geometry_change)
+        # self.resizeEvent.connect(self.refresh_geometry_change)
 
-    #def resizeEvent(self, geometry):
+    # def resizeEvent(self, geometry):
     #    self.setSceneRect(QtCore.QRectF(self.geometry()))
 
     def keyPressEvent(self, event):
@@ -53,15 +53,13 @@ class ZoomableGraphicsView(QtWidgets.QGraphicsView):
         if QtCore.Qt.Key_Right in self.list_key_on:
             dx += 1
         if dx != 0 or dy != 0:
-            #h_scroll_d = self.horizontalScrollBar().value() - self.horizontalScrollBar().minimum()
             zoom = math.sqrt(abs(self.transform().determinant()))
-            print(zoom)
-            step = (self.sceneRect().width() + self.sceneRect().height()) / 2 * self.arrow_navigation_interval / 1000 / zoom # 1 screen/s
-            self.setSceneRect(self.sceneRect().x() + dx * step, self.sceneRect().y() + dy * step, self.sceneRect().width(), self.sceneRect().height())
 
-            #self.horizontalScrollBar().setValue(h_scroll_value + self.horizontalScrollBar().minimum())
+            step = (
+                               self.sceneRect().width() + self.sceneRect().height()) / 2 * self.arrow_navigation_interval / 1000 / zoom  # 1 screen/s
+            self.setSceneRect(self.sceneRect().x() + dx * step, self.sceneRect().y() + dy * step,
+                              self.sceneRect().width(), self.sceneRect().height())
 
-            #self.horiz
             viewCenter = self.mapToScene(self.width() / 2., self.height() / 2.)
             viewCenter += QtCore.QPointF(dx * step, dy * step)
             self.centerOn(viewCenter)
@@ -69,27 +67,25 @@ class ZoomableGraphicsView(QtWidgets.QGraphicsView):
         self.list_key_pressed = []
         self.list_key_released = []
 
-
-
     def wheelEvent(self, event):
         # Zoom Factor
         zoomInFactor = 1.25
         zoomOutFactor = 1 / zoomInFactor
-    
+
         # Set Anchors
         #   self.setTransformationAnchor(QtWidgets.QGraphicsView.NoAnchor)
-        #self.setResizeAnchor(QtWidgets.QGraphicsView.NoAnchor)
-    
+        # self.setResizeAnchor(QtWidgets.QGraphicsView.NoAnchor)
+
         # Save the scene pos
         oldPos = self.mapToScene(event.pos())
-    
+
         # Zoom
         if event.angleDelta().y() > 0:
             zoomFactor = zoomInFactor
         else:
             zoomFactor = zoomOutFactor
         self.scale(zoomFactor, zoomFactor)
-    
+
         # Get the new position
         newPos = self.mapToScene(event.pos())
         # Move scene to old position
@@ -98,9 +94,9 @@ class ZoomableGraphicsView(QtWidgets.QGraphicsView):
         old_transform = self.transform()
         scene_rect = self.sceneRect()
 
-        self.setSceneRect(scene_rect.x() - delta.x(), scene_rect.y() - delta.y(), scene_rect.width(), scene_rect.height())
+        self.setSceneRect(scene_rect.x() - delta.x(), scene_rect.y() - delta.y(), scene_rect.width(),
+                          scene_rect.height())
         self.setTransform(old_transform)
-
 
 
 def _create_apt_poll(apt, name, serial):
@@ -108,10 +104,13 @@ def _create_apt_poll(apt, name, serial):
     func = lambda: apt.position(serial)
     return ("APT %s, s/n: %d" % (name, serial), func)
 
+
 def _create_anc350_poll(anc350, name, axis):
     """Creates a pair of a name and a function to get stage position """
+
     def f():
         return anc350.axisPos(axis)
+
     return ("Attocube %s axis: %d" % (name, axis), f)
 
 
@@ -121,7 +120,7 @@ class AnchorItem(QtWidgets.QGraphicsItemGroup):
         self.setEnabled(True)
         self.setActive(True)
         circle = QtWidgets.QGraphicsEllipseItem(self)
-        circle.setRect(-5,-5,10,10)
+        circle.setRect(-5, -5, 10, 10)
         circle.setBrush(QtGui.QBrush(QtCore.Qt.yellow))
         circle.setFlag(QtWidgets.QGraphicsItem.ItemIgnoresTransformations, True)
         self.real_pos = real_pos
@@ -144,13 +143,16 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
         self.loaded = False
         self.anchor_items = []
 
-        self.hlayout = QtWidgets.QGridLayout()
+        self.widget = QtWidgets.QWidget()
+        layout = QtWidgets.QGridLayout()
+        self.widget.setLayout(layout)
+
         button_load = QtWidgets.QPushButton("Load image")
-        self.hlayout.addWidget(button_load, 0, 0)
+        layout.addWidget(button_load, 0, 0)
         button_load.clicked.connect(self.loadImage)
 
         button_fit = QtWidgets.QPushButton("Fit Transform")
-        self.hlayout.addWidget(button_fit, 1, 0)
+        layout.addWidget(button_fit, 1, 0)
         button_fit.clicked.connect(self.find_best_transform)
 
         self.sides = OrderedDict([("x", -100), ("y", 100), ("rotation", 0), ("width", 100), ("aspect ratio", 1)])
@@ -158,26 +160,24 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
         self.checks = OrderedDict([])
         col = 1
         for s in self.sides:
-            self.hlayout.addWidget(QtWidgets.QLabel(s + ":"), 0, 2 * col - 1)
+            layout.addWidget(QtWidgets.QLabel(s + ":"), 0, 2 * col - 1)
 
             edit = QtWidgets.QLineEdit(str(self.sides[s]))
             edit.setValidator(QtGui.QDoubleValidator())
-            self.hlayout.addWidget(edit, 1, 2 * col-1, 1 ,2)
+            layout.addWidget(edit, 1, 2 * col - 1, 1, 2)
             edit.setFixedWidth(120)
             edit.editingFinished.connect(self.updatePixmap)
             edit.editingFinished.connect(self.save_settings)
             self.edits[s] = edit
 
             check = QtWidgets.QCheckBox("Fit")
-            self.hlayout.addWidget(check, 0, 2 * col)
+            layout.addWidget(check, 0, 2 * col)
             self.checks[s] = check
 
             col += 1
 
         for i in ["x", "y", "width", "rotation"]:
             self.checks[i].setChecked(1)
-
-
 
     def contextMenuEvent(self, event):
         menu = QtWidgets.QMenu()
@@ -186,7 +186,7 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
         selected_action = menu.exec(event.screenPos())
         if selected_action == remove_action:
             pass
-        elif selected_action == add_anchor_action:    
+        elif selected_action == add_anchor_action:
             dialog = QtWidgets.QDialog()
             dialog.setWindowTitle("Anchor this point")
             layout = QtWidgets.QFormLayout()
@@ -197,12 +197,12 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
             layout.addRow("Y coordinate", y_input)
             buttonBox = QtWidgets.QDialogButtonBox()
             buttonBox.setOrientation(QtCore.Qt.Horizontal)
-            buttonBox.setStandardButtons(QtWidgets.QDialogButtonBox.Cancel|QtWidgets.QDialogButtonBox.Ok)
+            buttonBox.setStandardButtons(QtWidgets.QDialogButtonBox.Cancel | QtWidgets.QDialogButtonBox.Ok)
             buttonBox.accepted.connect(dialog.accept)
             buttonBox.rejected.connect(dialog.reject)
             layout.addRow(buttonBox)
-            
-            #d.setWindowModality(Qt.ApplicationModal)
+
+            # d.setWindowModality(Qt.ApplicationModal)
             dialog.show()
             if dialog.exec_():
                 real_pos = (float(x_input.text()), float(y_input.text()))
@@ -211,8 +211,6 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
                 anchor.setPos(pos)
                 self.anchor_items.append(anchor)
                 self.save_settings()
-
-
 
     def loadImage(self):
         self.pixmap = QtGui.QPixmap()
@@ -227,7 +225,7 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
 
         if self.loaded:
             self.scene.removeItem(self)
-            del(self.pixmap)
+            del (self.pixmap)
             self.loaded = False
         try:
             if fileName.lower().endswith("svg"):
@@ -256,7 +254,8 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
             transform = QtGui.QTransform()
             transform.translate(transform_params[0], transform_params[1])
             transform.rotate(transform_params[2])
-            transform.scale(transform_params[3], transform_params[3] / transform_params[4] / (float(self.w)/float(self.h)))
+            transform.scale(transform_params[3],
+                            transform_params[3] / transform_params[4] / (float(self.w) / float(self.h)))
             transform.scale(1 / self.w, 1 / self.h)
             self.setTransform(transform)
 
@@ -289,13 +288,12 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
         except Exception as e:
             print(e)
 
-
     def remove_anchor(self, anchor_item):
         self.anchor_items.remove(anchor_item)
         anchor_item.setParentItem(None)
         anchor_item.scene().removeItem(anchor_item)
         self.save_settings()
-        
+
     def find_best_transform(self):
         """ Use least squares method to find the best transform which fits the anchor points"""
         if len(self.anchor_items) < 1:
@@ -303,14 +301,14 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
 
         keys = list(self.sides)
         transform_params = [float(self.edits[key].text()) for key in keys]
-        free_params_index = [] # indexes of free params
+        free_params_index = []  # indexes of free params
         free_params_initial = []
-        for i in range(len(keys)): # take at most first 2*n free parameters when there are n anchors
+        for i in range(len(keys)):  # take at most first 2*n free parameters when there are n anchors
             if self.checks[keys[i]].isChecked() and len(free_params_index) < 2 * len(self.anchor_items):
                 free_params_index.append(i)
                 free_params_initial.append(transform_params[i])
-        #print("init params ", free_params_initial, " free_params_index ", free_params_index)
-        data = [(a.pos(),a.real_pos) for a in self.anchor_items]
+        # print("init params ", free_params_initial, " free_params_index ", free_params_index)
+        data = [(a.pos(), a.real_pos) for a in self.anchor_items]
 
         def update_transform_params(params):
             j = 0
@@ -323,16 +321,17 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
             transform = QtGui.QTransform()
             transform.translate(transform_params[0], transform_params[1])
             transform.rotate(transform_params[2])
-            transform.scale(transform_params[3], transform_params[3] / transform_params[4] / (float(self.w) / float(self.h)))
+            transform.scale(transform_params[3],
+                            transform_params[3] / transform_params[4] / (float(self.w) / float(self.h)))
             transform.scale(1 / self.w, 1 / self.h)
             return transform
-        
+
         def fitfunc(params):
             transform = build_transform(params)
             chi2 = 0.
             for point0, point1 in data:
                 diff = QtCore.QPointF(point1[0], point1[1]) - transform.map(point0)
-                chi2 += diff.x()**2 + diff.y()**2
+                chi2 += diff.x() ** 2 + diff.y() ** 2
             return chi2
 
         best = optimize.fmin(fitfunc, free_params_initial)
@@ -351,18 +350,7 @@ class MapAreaItem(QtWidgets.QGraphicsItem):
         self.setZValue(10)
 
         self.epsilon = 0.0000000001
-        self.x = 100.
-        def set_x(self, x):
-            self.x = x
-            self.update_transform()
-        self.y = 200.
-        def set_y(self, y):
-            self.y = y
-            self.update_transform()
-        self.width = 300.
-        self.height = 400.
-        self.step_x = 10.
-        self.step_y = 10.
+
         self.scene.addItem(self)
 
         self.setAcceptHoverEvents(True)
@@ -370,16 +358,46 @@ class MapAreaItem(QtWidgets.QGraphicsItem):
         self.hover = None
         self.drag = None
         self.setFlags(QtWidgets.QGraphicsItem.ItemIsSelectable | QtWidgets.QGraphicsItem.ItemIsFocusable)
+
+        self.widget = QtWidgets.QWidget()
+        layout = QtWidgets.QGridLayout()
+        self.widget.setLayout(layout)
+        self.sides = OrderedDict(
+            [("x", -100), ("y", 100), ("width", 200), ("height", 150), ("rotation", 0), ("step_x", 10), ("step_y", 10)])
+        self.edits = OrderedDict([])
+
+        col = 0
+        for s in self.sides:
+            layout.addWidget(QtWidgets.QLabel(s + ":"), col, 0)
+            edit = QtWidgets.QLineEdit(str(self.sides[s]))
+            edit.setValidator(QtGui.QDoubleValidator())
+            layout.addWidget(edit, col, 1)
+            edit.setFixedWidth(70)
+            edit.editingFinished.connect(self.update_transform)
+            edit.editingFinished.connect(self.scene.update)
+            self.edits[s] = edit
+            col += 1
+
         self.update_transform()
 
+    def set_parameter(self, parameter, value):
+        if value == 0:
+            self.edits[parameter].setText("0")
+        else:
+            self.edits[parameter].setText(str(round(value, 7 - int(math.floor(math.log10(abs(value)))))))
+        self.update_transform()
+
+    def get_parameter(self, parameter):
+        return float(self.edits[parameter].text())
 
     def update_border_rect(self, zoom):
         rect = self.boundingRect()
         dx = QtCore.QPointF(self.border_size / zoom, 0)
-        dy = QtCore.QPointF(0, -self.border_size / zoom) # minus because y axis inversion
+        dy = QtCore.QPointF(0, -self.border_size / zoom)  # minus because y axis inversion
         self.border_rect = {}
         self.border_rect_ordered_keys = ['c', 'l', 'b', 'r', 't', 'bl', 'tl', 'br', 'tr']
-        self.border_rect['bl'] = QtCore.QRectF(rect.topLeft(), rect.topLeft() + dx - dy) # top and bottom switched - y axis inversion
+        self.border_rect['bl'] = QtCore.QRectF(rect.topLeft(),
+                                               rect.topLeft() + dx - dy)  # top and bottom switched - y axis inversion
         self.border_rect['br'] = QtCore.QRectF(rect.topRight(), rect.topRight() - dx - dy)
         self.border_rect['tr'] = QtCore.QRectF(rect.bottomRight(), rect.bottomRight() - dx + dy)
         self.border_rect['tl'] = QtCore.QRectF(rect.bottomLeft(), rect.bottomLeft() + dx + dy)
@@ -390,11 +408,12 @@ class MapAreaItem(QtWidgets.QGraphicsItem):
         self.border_rect['c'] = QtCore.QRectF(rect.bottomLeft() + dx + dy, rect.topRight() - dx - dy)
 
     def boundingRect(self):
-        return QtCore.QRectF(0, 0, self.width, self.height)
+        return QtCore.QRectF(0, 0, self.get_parameter("width"), self.get_parameter("height"))
 
     def update_transform(self):
         transform = QtGui.QTransform()
-        transform.translate(self.x, self.y)
+        transform.translate(self.get_parameter("x"), self.get_parameter("y"))
+        transform.rotate(self.get_parameter("rotation"))
         self.setTransform(transform)
 
     def hoverEnterEvent(self, event):
@@ -407,21 +426,22 @@ class MapAreaItem(QtWidgets.QGraphicsItem):
 
     def hoverMoveEvent(self, event):
         self.refresh_hover_rect(event.pos())
+        print("pos0: ", event.pos())
 
     def refresh_hover_rect(self, mouse_pos):
         self.hover = None
-        for rect in self.border_rect_ordered_keys:
+        for rect in self.border_rect_ordered_keys:  # rectangles can overlap for small zoom, ordering prefers corners for easy resize
             if self.border_rect[rect].contains(mouse_pos):
                 self.hover = rect
+
         self.scene.update()
 
     def mousePressEvent(self, event):
         if event.button() != QtCore.Qt.LeftButton:
             return
         self.drag = None
-        for rect in self.border_rect_ordered_keys: # rectangles can overlap for small zoom, ordering prefers corners for easy resize
-            if self.border_rect[rect].contains(event.pos()):
-                self.drag = rect
+        self.refresh_hover_rect(event.pos())
+        self.drag = self.hover
         self.drag_pos = event.pos()
 
     def mouseReleaseEvent(self, event):
@@ -432,47 +452,63 @@ class MapAreaItem(QtWidgets.QGraphicsItem):
 
     def mouseMoveEvent(self, event):
         if self.drag != None:
-            flip_x = {'l': 'r', 'tl': 'tr', 't': 't', 'tr' : 'tl', 'r': 'l', 'br' : 'bl', 'b' : 'b', 'bl': 'br'}
-            flip_y = {'l': 'l', 'tl': 'bl', 't': 'b', 'tr' : 'br', 'r': 'r', 'br' : 'tr', 'b' : 't', 'bl': 'tl'}
+            flip_x = {'l': 'r', 'tl': 'tr', 't': 't', 'tr': 'tl', 'r': 'l', 'br': 'bl', 'b': 'b', 'bl': 'br'}
+            flip_y = {'l': 'l', 'tl': 'bl', 't': 'b', 'tr': 'br', 'r': 'r', 'br': 'tr', 'b': 't', 'bl': 'tl'}
             v = event.pos() - self.drag_pos
+            # self.transform().inverted()[0].map(
+            x = 0
+            y = 0
+            width = self.get_parameter("width")
+            height = self.get_parameter("height")
 
             if self.drag == 'c':
-                self.x += v.x()
-                self.y += v.y()
+                x += v.x()
+                y += v.y()
 
             if self.drag == 'l' or self.drag == 'tl' or self.drag == 'bl':
-                self.x += v.x()
-                self.width -= v.x()
+                x += v.x()
+                width -= v.x()
             if self.drag == 'r' or self.drag == 'tr' or self.drag == 'br':
-                self.width += v.x()
+                width += v.x()
                 self.drag_pos.setX(self.drag_pos.x() + v.x())
             if self.drag == 'b' or self.drag == 'bl' or self.drag == 'br':
-                self.y += v.y()
-                self.height -= v.y()
+                y += v.y()
+                height -= v.y()
             if self.drag == 't' or self.drag == 'tl' or self.drag == 'tr':
-                self.height += v.y()
+                height += v.y()
                 self.drag_pos.setY(self.drag_pos.y() + v.y())
 
-            if self.width < 0:
+            if width < 0:
                 self.drag = self.hover = flip_x[self.drag]
-                self.width = -self.width
-                self.x -= self.width
-                self.drag_pos.setX(self.drag_pos.x() + self.width)
-            if self.height < 0:
+                width = -width
+                x -= width
+                self.drag_pos.setX(self.drag_pos.x() + width)
+            if height < 0:
                 self.drag = self.hover = flip_y[self.drag]
-                self.height = -self.height
-                self.y -= self.height
-                self.drag_pos.setY(self.drag_pos.y() + self.height)
+                height = -height
+                y -= height
+                self.drag_pos.setY(self.drag_pos.y() + height)
 
-            self.update_transform()
+            print(x, y)
+            new_pos = self.transform().map(QtCore.QPointF(x, y))
+            self.set_parameter("x", new_pos.x())
+            self.set_parameter("y", new_pos.y())
+            self.set_parameter("width", width)
+            self.set_parameter("height", height)
+
             self.scene.update()
-
+            self.update()
 
     def paint(self, painter, option, widget=None):
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         zoom = option.levelOfDetailFromTransform(painter.worldTransform())
 
         self.update_border_rect(zoom)
+
+        width = self.get_parameter("width")
+        height = self.get_parameter("height")
+        step_x = self.get_parameter("step_x")
+        step_y = self.get_parameter("step_y")
 
         pen = QtGui.QPen()
         pen.setCosmetic(True)  # fixed width regardless of transformations
@@ -483,35 +519,41 @@ class MapAreaItem(QtWidgets.QGraphicsItem):
         if self.hover != None:
             painter.drawRect(self.border_rect[self.hover])
 
-        max_grid = max(zoom * self.step_x, zoom * self.step_y)
-        if max_grid > 6:
+        max_grid = max(zoom * step_x, zoom * step_y)
+        min_grid = min(zoom * step_x, zoom * step_y)
+        if max_grid > 6 and min_grid > 3:
             pen = QtGui.QPen()
             pen.setCosmetic(True)  # fixed width regardless of transformations
             pen.setColor(QtGui.QColor(255, 0, 0))
             pen.setWidth(max(2, min(7, max_grid / 5)))
             painter.setPen(pen)
 
-            #calculate which area of map rectangle is visible on screen
-            visible_rect = self.parent.viewwidget.mapToScene(self.parent.viewwidget.viewport().geometry()).boundingRect()
-            x1 = max(visible_rect.x() - self.x, 0)
-            x2 = min(visible_rect.x() + visible_rect.width() - self.x, self.width)
-            y1 = max(visible_rect.y() - self.y, 0)
-            y2 = min(visible_rect.y() + visible_rect.height() - self.y, self.height)
+            # calculate which area of map rectangle is visible on screen
+            visible_rect = self.parent.viewwidget.mapToScene(
+                self.parent.viewwidget.viewport().geometry()).boundingRect()
 
-            for ix in range(int(x1 / self.step_x - self.epsilon + 1), int(x2 / self.step_x + self.epsilon) + 1):
-                for iy in range(int(y1 / self.step_y - self.epsilon + 1), int(y2 / self.step_y + self.epsilon) + 1):
-                    painter.drawPoint(QtCore.QPointF(self.step_x * ix, self.step_y * iy))
-
+            nx = int(width / step_x + self.epsilon + 1)
+            ny = int(height / step_y + self.epsilon + 1)
+            if nx * ny < 100000:
+                for ix in range(nx):
+                    for iy in range(ny):
+                        painter.drawPoint(QtCore.QPointF(step_x * ix, step_y * iy))
 
     def get_positions(self):
         positions = []
-        if(self.step_x > 0 and self.step_y > 0):
-            n_x = int(self.width / self.step_x + self.epsilon + 1)
-            n_y = int(self.height / self.step_y + self.epsilon + 1)
-            if n_x * n_y <= 1000000:
-                for ix in range(n_x):
-                    for iy in range(n_y):
-                        positions.append((self.x + self.step_x * ix, self.y + self.step_y * iy))
+        width = self.get_parameter("width")
+        height = self.get_parameter("height")
+        step_x = self.get_parameter("step_x")
+        step_y = self.get_parameter("step_y")
+        if (step_x > 0 and step_y > 0):
+            nx = int(width / step_x + epsilon + 1)
+            ny = int(height / step_y + epsilon + 1)
+            if nx * ny <= 1000000:
+                for ix in range(nx):
+                    for iy in range(ny):
+                        point = QtCore.QPointF(step_x * ix, step_y * iy)
+                        point_global = self.transform().map(point)
+                        positions.append(point_global.x(), point_global.y())
         return positions
 
 
@@ -528,14 +570,18 @@ class MapWidget(QtWidgets.QWidget):
         self.timer.timeout.connect(self.timeout)
         self.timer.start()
         self.active = False
-        
-        #self.resize(500, 700)
+
+        # self.resize(500, 700)
         layout = QtWidgets.QVBoxLayout()
+        htop_layout = QtWidgets.QHBoxLayout()
+        htop_widget = QtWidgets.QWidget()
+        htop_widget.setLayout(htop_layout)
         self.setLayout(layout)
         self.viewwidget = ZoomableGraphicsView()
-        layout.addWidget(self.viewwidget)
-        
-        hlayout = QtWidgets.QHBoxLayout()       
+        htop_layout.addWidget(self.viewwidget)
+        layout.addWidget(htop_widget)
+
+        hlayout = QtWidgets.QHBoxLayout()
         hlayout.addWidget(QtWidgets.QLabel("x:"))
         self.xwidget = QtWidgets.QLineEdit()
         self.xwidget.setEnabled(False)
@@ -545,20 +591,24 @@ class MapWidget(QtWidgets.QWidget):
         self.ywidget = QtWidgets.QLineEdit()
         self.ywidget.setEnabled(False)
         hlayout.addWidget(self.ywidget)
-        hlayout.addStretch(10)        
+        hlayout.addStretch(10)
         layout.addLayout(hlayout)
         self.show()
-        
+
         self.pixmapItem = None
 
         self.setupScene()
 
-        layout.addLayout(self.bg_item.hlayout)
+        layout.addWidget(self.bg_item.widget)
+        htop_layout.addWidget(self.map_area.widget)
+        policy = QtWidgets.QSizePolicy()  # QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Minimum)
+        policy.setHorizontalStretch(200)
+        self.map_area.widget.setSizePolicy(policy)
 
         hlayout3 = QtWidgets.QHBoxLayout()
         self.combos = {}
         for direction in ("x", "y"):
-            hlayout3.addWidget(QtWidgets.QLabel(direction+ ":"))
+            hlayout3.addWidget(QtWidgets.QLabel(direction + ":"))
             combo = QtWidgets.QComboBox()
             combo.addItem("None")
             combo.setMinimumWidth(200)
@@ -567,11 +617,11 @@ class MapWidget(QtWidgets.QWidget):
             hlayout3.addSpacing(20)
         hlayout3.addStretch(5)
         layout.addLayout(hlayout3)
-            
+
         buttonlayout = QtWidgets.QHBoxLayout()
         self.refreshButton = QtWidgets.QPushButton("Refresh")
         self.refreshButton.clicked.connect(self.refreshCombos)
-        buttonlayout.addWidget(self.refreshButton)      
+        buttonlayout.addWidget(self.refreshButton)
         self.startButton = QtWidgets.QPushButton("Start control")
         self.startButton.setCheckable(True)
         self.startButton.clicked.connect(self.start)
@@ -594,40 +644,38 @@ class MapWidget(QtWidgets.QWidget):
     def saveSettings(self):
         try:
             with open("config\\map_widget.cfg", "w") as file:
-                axes = {direction : self.combos[direction].currentText() for direction in self.combos}
+                axes = {direction: self.combos[direction].currentText() for direction in self.combos}
                 file.write(jsonpickle.encode(axes))
         except Exception as e:
             print(e)
 
-
     def setupScene(self):
         self.scene = QtWidgets.QGraphicsScene()
         self.viewwidget.setScene(self.scene)
-        
+
         self.cursor = QtWidgets.QGraphicsItemGroup()
         self.cursor.setZValue(100)
         circle = QtWidgets.QGraphicsEllipseItem(self.cursor)
-        circle.setRect(-5,-5,10,10)
+        circle.setRect(-5, -5, 10, 10)
         circle.setBrush(QtGui.QBrush(QtCore.Qt.red))
         circle.setFlag(QtWidgets.QGraphicsItem.ItemIgnoresTransformations, True)
         self.scene.addItem(self.cursor)
-        
+
         def onMouseMoveEvent(event):
             position = QtCore.QPointF(event.scenePos())
             self.xwidget.setText(str(position.x()))
             self.ywidget.setText(str(position.y()))
-            QtWidgets.QGraphicsScene.mouseMoveEvent(self.scene, event) #propagate to objects in scene
-            
+            QtWidgets.QGraphicsScene.mouseMoveEvent(self.scene, event)  # propagate to objects in scene
+
         self.scene.mouseMoveEvent = onMouseMoveEvent
-        
+
         self.bg_item = SampleImageItem(self)
 
-        self.maparea = MapAreaItem(self)
-        
+        self.map_area = MapAreaItem(self)
 
     def start(self, activate=True):
         self.active = activate
-            
+
     def refreshCombos(self):
         self.start(False)
         self.pools = []
@@ -637,7 +685,7 @@ class MapWidget(QtWidgets.QWidget):
             from devices.thorlabs.apt import APT
             for name, apt in {k: v for k, v in self.device_list.items() if isinstance(v, APT)}.items():
                 for serial in apt.devices():
-                    self.pools.append( _create_apt_poll(apt, name, serial) )
+                    self.pools.append(_create_apt_poll(apt, name, serial))
         except Exception as e:
             print(e)
 
@@ -648,25 +696,24 @@ class MapWidget(QtWidgets.QWidget):
                     self.pools.append(_create_anc350_poll(anc350, name, axis))
         except Exception as e:
             print(e)
-        
-        for direction ,combo in self.combos.items():
+
+        for direction, combo in self.combos.items():
             n = combo.currentIndex()
             combo.clear()
-            combo.addItem("None", lambda : None)
+            combo.addItem("None", lambda: None)
             for name, func in self.pools:
                 combo.addItem(name, func)
             combo.setCurrentIndex(n)
 
         self.loadSettings()
-            
-            
+
     def timeout(self):
         if self.active:
             for direction, combo in self.combos.items():
                 if combo.currentText() == "None":
                     return
                 device_id = combo.currentIndex() - 1
-                #print(self.pools[device_id][0])
+                # print(self.pools[device_id][0])
                 if direction == "x":
                     self.cursor.setX(self.pools[device_id][1]())
                 else:
