@@ -145,6 +145,7 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
 
         self.widget = QtWidgets.QWidget()
         layout = QtWidgets.QGridLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         self.widget.setLayout(layout)
 
         button_load = QtWidgets.QPushButton("Load image")
@@ -359,14 +360,17 @@ class MapAreaItem(QtWidgets.QGraphicsItem):
         self.drag = None
         self.setFlags(QtWidgets.QGraphicsItem.ItemIsSelectable | QtWidgets.QGraphicsItem.ItemIsFocusable)
 
-        self.widget = QtWidgets.QWidget()
         layout = QtWidgets.QGridLayout()
+        self.widget = QtWidgets.QFrame()
+        self.widget.setFrameShape(QtWidgets.QFrame.Box)
         self.widget.setLayout(layout)
+        self.widget.setSizePolicy(QtWidgets.QSizePolicy())
+
         self.sides = OrderedDict(
             [("x", -100), ("y", 100), ("width", 200), ("height", 150), ("rotation", 0), ("step_x", 10), ("step_y", 10)])
         self.edits = OrderedDict([])
 
-        col = 0
+        col = 1
         for s in self.sides:
             layout.addWidget(QtWidgets.QLabel(s + ":"), col, 0)
             edit = QtWidgets.QLineEdit(str(self.sides[s]))
@@ -396,8 +400,7 @@ class MapAreaItem(QtWidgets.QGraphicsItem):
         dy = QtCore.QPointF(0, -self.border_size / zoom)  # minus because y axis inversion
         self.border_rect = {}
         self.border_rect_ordered_keys = ['c', 'l', 'b', 'r', 't', 'bl', 'tl', 'br', 'tr']
-        self.border_rect['bl'] = QtCore.QRectF(rect.topLeft(),
-                                               rect.topLeft() + dx - dy)  # top and bottom switched - y axis inversion
+        self.border_rect['bl'] = QtCore.QRectF(rect.topLeft(), rect.topLeft() + dx - dy)  # top/bottom - y inversion
         self.border_rect['br'] = QtCore.QRectF(rect.topRight(), rect.topRight() - dx - dy)
         self.border_rect['tr'] = QtCore.QRectF(rect.bottomRight(), rect.bottomRight() - dx + dy)
         self.border_rect['tl'] = QtCore.QRectF(rect.bottomLeft(), rect.bottomLeft() + dx + dy)
@@ -426,7 +429,6 @@ class MapAreaItem(QtWidgets.QGraphicsItem):
 
     def hoverMoveEvent(self, event):
         self.refresh_hover_rect(event.pos())
-        print("pos0: ", event.pos())
 
     def refresh_hover_rect(self, mouse_pos):
         self.hover = None
@@ -455,7 +457,7 @@ class MapAreaItem(QtWidgets.QGraphicsItem):
             flip_x = {'l': 'r', 'tl': 'tr', 't': 't', 'tr': 'tl', 'r': 'l', 'br': 'bl', 'b': 'b', 'bl': 'br'}
             flip_y = {'l': 'l', 'tl': 'bl', 't': 'b', 'tr': 'br', 'r': 'r', 'br': 'tr', 'b': 't', 'bl': 'tl'}
             v = event.pos() - self.drag_pos
-            # self.transform().inverted()[0].map(
+
             x = 0
             y = 0
             width = self.get_parameter("width")
@@ -489,7 +491,7 @@ class MapAreaItem(QtWidgets.QGraphicsItem):
                 y -= height
                 self.drag_pos.setY(self.drag_pos.y() + height)
 
-            print(x, y)
+
             new_pos = self.transform().map(QtCore.QPointF(x, y))
             self.set_parameter("x", new_pos.x())
             self.set_parameter("y", new_pos.y())
@@ -571,41 +573,70 @@ class MapWidget(QtWidgets.QWidget):
         self.timer.start()
         self.active = False
 
-        # self.resize(500, 700)
-        layout = QtWidgets.QVBoxLayout()
-        htop_layout = QtWidgets.QHBoxLayout()
-        htop_widget = QtWidgets.QWidget()
-        htop_widget.setLayout(htop_layout)
-        self.setLayout(layout)
-        self.viewwidget = ZoomableGraphicsView()
-        htop_layout.addWidget(self.viewwidget)
-        layout.addWidget(htop_widget)
 
-        hlayout = QtWidgets.QHBoxLayout()
-        hlayout.addWidget(QtWidgets.QLabel("x:"))
+        layout = QtWidgets.QVBoxLayout() # main vertical layout
+        self.setLayout(layout)
+        hlayout1 = QtWidgets.QHBoxLayout() # horizontal layout for graphics view and mapping
+        layout.addLayout(hlayout1)
+        self.viewwidget = ZoomableGraphicsView()
+        self.setupScene()
+
+
+        self.map_area_scroll = QtWidgets.QScrollArea()
+        self.map_area_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.map_area_scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
+        self.map_area_scroll.setWidgetResizable(True)
+        map_area_scroll_frame = QtWidgets.QFrame(self.map_area_scroll)
+        self.map_area_layout = QtWidgets.QVBoxLayout()
+        map_area_scroll_frame.setLayout(self.map_area_layout)
+        self.map_area_scroll.setWidget(map_area_scroll_frame)
+        self.map_area_scroll.setFixedWidth(210)
+        self.map_area_scroll.setVisible(False)
+        map_area_buttons_layout = QtWidgets.QHBoxLayout()
+        self.map_area_layout.addLayout(map_area_buttons_layout)
+        self.map_area_layout.addStretch(10)
+        
+        self.map_area_items = []
+        self.button_add_map_area = QtWidgets.QPushButton("Add Map Area")
+        map_area_buttons_layout.addWidget(self.button_add_map_area)
+        self.button_add_map_area.clicked.connect(self.add_map_area)
+        self.button_delete_map_area = QtWidgets.QPushButton("Delete Map Area")
+        map_area_buttons_layout.addWidget(self.button_delete_map_area)
+        self.button_delete_map_area.setEnabled(False)
+        self.button_delete_map_area.clicked.connect(self.delete_map_area)
+
+        hlayout1.addWidget(self.map_area_scroll)
+
+        hlayout1.addWidget(self.viewwidget)
+
+        hlayout2 = QtWidgets.QHBoxLayout()
+
+        check_box_enable_map = QtWidgets.QCheckBox("Show mapping panel")
+        check_box_enable_map.stateChanged.connect(self.map_area_scroll.setVisible)
+        hlayout2.addWidget(check_box_enable_map)
+        hlayout2.addStretch(10)
+
+        hlayout2.addWidget(QtWidgets.QLabel("x:"))
         self.xwidget = QtWidgets.QLineEdit()
         self.xwidget.setEnabled(False)
-        hlayout.addWidget(self.xwidget)
-        hlayout.addSpacing(20)
-        hlayout.addWidget(QtWidgets.QLabel("y:"))
+        hlayout2.addWidget(self.xwidget)
+        hlayout2.addSpacing(20)
+        hlayout2.addWidget(QtWidgets.QLabel("y:"))
         self.ywidget = QtWidgets.QLineEdit()
         self.ywidget.setEnabled(False)
-        hlayout.addWidget(self.ywidget)
-        hlayout.addStretch(10)
-        layout.addLayout(hlayout)
+        hlayout2.addWidget(self.ywidget)
+        layout.addLayout(hlayout2)
         self.show()
 
         self.pixmapItem = None
 
-        self.setupScene()
 
+        self.bg_item = SampleImageItem(self)
         layout.addWidget(self.bg_item.widget)
-        htop_layout.addWidget(self.map_area.widget)
-        policy = QtWidgets.QSizePolicy()  # QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Minimum)
-        policy.setHorizontalStretch(200)
-        self.map_area.widget.setSizePolicy(policy)
 
         hlayout3 = QtWidgets.QHBoxLayout()
+
+
         self.combos = {}
         for direction in ("x", "y"):
             hlayout3.addWidget(QtWidgets.QLabel(direction + ":"))
@@ -618,17 +649,35 @@ class MapWidget(QtWidgets.QWidget):
         hlayout3.addStretch(5)
         layout.addLayout(hlayout3)
 
-        buttonlayout = QtWidgets.QHBoxLayout()
+        hlayout4 = QtWidgets.QHBoxLayout()
         self.refreshButton = QtWidgets.QPushButton("Refresh")
         self.refreshButton.clicked.connect(self.refreshCombos)
-        buttonlayout.addWidget(self.refreshButton)
+        hlayout4.addWidget(self.refreshButton)
         self.startButton = QtWidgets.QPushButton("Start control")
         self.startButton.setCheckable(True)
         self.startButton.clicked.connect(self.start)
         self.startButton.clicked.connect(self.saveSettings)
-        buttonlayout.addWidget(self.startButton)
-        buttonlayout.addStretch(1)
-        layout.addLayout(buttonlayout)
+        hlayout4.addWidget(self.startButton)
+        hlayout4.addStretch(1)
+        layout.addLayout(hlayout4)
+
+    def add_map_area(self):
+        if len(self.map_area_items) == 0:
+            self.button_delete_map_area.setEnabled(True)
+        map_area = MapAreaItem(self)
+        self.map_area_layout.removeItem(self.map_area_layout.itemAt(\
+            self.map_area_layout.count() - 1))
+        self.map_area_layout.insertWidget(-3, map_area.widget)
+        self.map_area_layout.addStretch(10)
+        self.map_area_items.append(map_area)
+
+    def delete_map_area(self):
+        if len(self.map_area_items) == 1:
+            self.button_delete_map_area.setEnabled(False)
+        self.scene.removeItem(self.map_area_items[-1])
+        self.map_area_items[-1].widget.setVisible(False)
+        self.map_area_layout.removeWidget(self.map_area_items[-1].widget)
+        self.map_area_items.pop(-1)
 
     def loadSettings(self):
         try:
@@ -669,9 +718,7 @@ class MapWidget(QtWidgets.QWidget):
 
         self.scene.mouseMoveEvent = onMouseMoveEvent
 
-        self.bg_item = SampleImageItem(self)
 
-        self.map_area = MapAreaItem(self)
 
     def start(self, activate=True):
         self.active = activate
