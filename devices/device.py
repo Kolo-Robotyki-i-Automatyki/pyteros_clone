@@ -57,6 +57,11 @@ def load_devices():
     for section in config.sections():
         try:
             items = dict(config.items(section))
+            if 'enabled' in items:
+                if items['enabled'].lower() in ['true', '1', 't', 'y', 'yes']:
+                    del(items['enabled'])
+                else:
+                    continue
             module_name, class_name = items['class'].rsplit(".", 1)
             kwargs = items.copy()
             kwargs.pop('class')
@@ -74,6 +79,11 @@ def load_workers():
     for section in config.sections():
         try:
             items = dict(config.items(section))
+            if 'enabled' in items:
+                if items['enabled'].lower() in ['true', '1', 't', 'y', 'yes']:
+                    del(items['enabled'])
+                else:
+                    continue
             module_name, class_name = items['class'].rsplit(".", 1)
             name = items['name']
             kwargs = items.copy()
