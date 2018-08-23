@@ -7,7 +7,7 @@ import jsonpickle
 from ..misc.xbox import XBoxPad
 import time
 
-dead_zone = 0.14
+dead_zone = 0.15
 
 def _create_apt_slave(apt, name, serial):
     """Creates a pair of a name and a function to move a stage """
@@ -29,8 +29,7 @@ class Master():
         self.checkInverted = checkInverted
         self.editSpeed = editSpeed
 
-    def dump(self): #serialises parameters
-        #if self.combo.currentText() != "None":
+    def dump(self): #serializes parameters
         self.comboRecentValid = self.combo.currentText()
         return (self.comboRecentValid, self.checkInverted.isChecked(), self.editSpeed.text())
 
@@ -40,7 +39,7 @@ class Master():
         self.editSpeed.setText(params[2])
 
 class JoystickControlWidget(QtWidgets.QWidget):
-    """ A widget for interactive control of APT motors using XBoxPad """
+    """ A widget for interactive control of APT motors or attocube axes using XBoxPad """
     
     def __init__(self, slave_devices=[], parent=None):
         super().__init__(parent)
@@ -105,13 +104,6 @@ class JoystickControlWidget(QtWidgets.QWidget):
         except Exception as e:
             print(e)
 
-        try:
-            from ..attocube.dummyanc350 import DummyANC350
-            for name, anc350 in {k: v for k, v in self.device_list.items() if isinstance(v, DummyANC350)}.items():
-                for axis in anc350.axes():
-                    self.slaves.append(_create_anc350_slave(anc350, name, axis))
-        except Exception as e:
-            print(e)
 
         self.refreshCombos()
 
@@ -186,6 +178,12 @@ class JoystickControlWidget(QtWidgets.QWidget):
         if not self.active:
             return
         state = self.xbox.currentStatus()
+        boost = 1
+
+        if state["button9"]:
+            boost *= 10
+        if state["button10"]:
+            boost *= 10
 
         for master in self.masters:
             if master.axis_id not in state:
@@ -198,7 +196,7 @@ class JoystickControlWidget(QtWidgets.QWidget):
             if master.checkInverted.isChecked():
                 value = -value
             if len(master.editSpeed.text()) != 0:
-                value *= float(master.editSpeed.text())
+                value *= float(master.editSpeed.text()) * boost
             slave_nr = master.combo.currentIndex() - 1
             if slave_nr >= 0:
                 self.slaves[slave_nr][1](value)
