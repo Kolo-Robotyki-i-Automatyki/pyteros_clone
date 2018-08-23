@@ -131,8 +131,7 @@ class AnchorItem(QtWidgets.QGraphicsItemGroup):
         removeAction = menu.addAction("Remove anchor point")
         selectedAction = menu.exec(event.screenPos())
         if selectedAction == removeAction:
-            self.parentItem().remove_anchor(self)
-            self.save_settings()
+            self.parentItem().remove_anchor(self, save = True)
 
 
 class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
@@ -267,7 +266,7 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
                 transform_params, anchors = jsonpickle.decode(file.read())
 
                 for anchor in self.anchor_items:
-                    self.remove_anchor(anchor)
+                    self.remove_anchor(anchor, save = False)
                 for a in anchors:
                     real_pos, pos = a
                     anchor = AnchorItem(self, real_pos)
@@ -290,10 +289,12 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
         except Exception as e:
             print(e)
 
-    def remove_anchor(self, anchor_item):
+    def remove_anchor(self, anchor_item, save = False):
         self.anchor_items.remove(anchor_item)
         anchor_item.setParentItem(None)
         anchor_item.scene().removeItem(anchor_item)
+        if save:
+            self.save_settings()
 
     def find_best_transform(self):
         """ Use least squares method to find the best transform which fits the anchor points"""
