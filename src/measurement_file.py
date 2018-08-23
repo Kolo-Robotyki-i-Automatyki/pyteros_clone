@@ -46,7 +46,7 @@ class MeasurementFile:
         
         offset=0
         if 'x' in self.file:
-            x = array(self.file['x'])
+            x = array(self.file['x'])[0]
             if len(x.shape)!=1 or len(x) != z.shape[1]:
                 print("Mismatch between the size of x (%d) and z (%d)" %(len(x), z.shape[1]))
                 return
@@ -62,7 +62,7 @@ class MeasurementFile:
                 y = np.r_[0,y]
             z = np.r_[y,z]
         
-        np.savetxt(self.fname+'.txt',z)
+        np.savetxt(self.filename+'.txt',z)
         
     
     def close(self):

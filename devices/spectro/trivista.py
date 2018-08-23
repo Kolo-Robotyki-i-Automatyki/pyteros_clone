@@ -57,7 +57,7 @@ class Trivista(Device):
     
     def get_spectrum(self):      
         frame = self.pipe.GetActualData()
-        return list(np.array(frame.xAxis.calibrationData)), list(np.array(frame.data))
+        return np.array(list(frame.xAxis.calibrationData)), np.array(list(frame.data))
         
     def createDock(self, parent, menu):
         pass
