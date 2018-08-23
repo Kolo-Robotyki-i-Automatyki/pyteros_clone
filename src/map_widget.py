@@ -132,6 +132,7 @@ class AnchorItem(QtWidgets.QGraphicsItemGroup):
         selectedAction = menu.exec(event.screenPos())
         if selectedAction == removeAction:
             self.parentItem().remove_anchor(self)
+            self.save_settings()
 
 
 class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
@@ -293,7 +294,6 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
         self.anchor_items.remove(anchor_item)
         anchor_item.setParentItem(None)
         anchor_item.scene().removeItem(anchor_item)
-        self.save_settings()
 
     def find_best_transform(self):
         """ Use least squares method to find the best transform which fits the anchor points"""
