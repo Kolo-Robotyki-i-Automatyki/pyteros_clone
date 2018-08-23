@@ -9,6 +9,7 @@ import sys
 import clr
 import time
 from devices import Device
+import numpy as np
 
 assemblyPath = "C:\\Program Files\\S&I VistaControl"
 if assemblyPath not in sys.path:
@@ -56,7 +57,7 @@ class Trivista(Device):
     
     def get_spectrum(self):      
         frame = self.pipe.GetActualData()
-        return list(frame.xAxis.calibrationData), list(frame.data)
+        return list(np.array(frame.xAxis.calibrationData)), list(np.array(frame.data))
         
     def createDock(self, parent, menu):
         pass
