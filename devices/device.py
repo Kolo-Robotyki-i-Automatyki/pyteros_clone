@@ -9,7 +9,6 @@ class Device:
     e.g. a positioner or a spectrometer """
     def __init__(self, **kwargs):
         self.priority = Device.Priority.Normal
-        active_devices.append(self)
         
     class Priority(Enum):
         Critical = 1 # Experiment is stopped if device fails
@@ -20,7 +19,7 @@ class Device:
     def name(self):
         return type(self).__name__
     
-    def status_to_save(self):
+    def status(self):
         return {}
 
 
