@@ -60,7 +60,7 @@ class MeasurementFile:
                 return
             if offset:
                 y = np.r_[0,y]
-            z = np.r_[y,z]
+            z = np.concatenate((y[:,np.newaxis],z),axis=1)
         
         np.savetxt(self.filename+'.txt',z)
         
