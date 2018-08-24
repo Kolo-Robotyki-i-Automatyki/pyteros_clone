@@ -180,10 +180,13 @@ class JoystickControlWidget(QtWidgets.QWidget):
         state = self.xbox.currentStatus()
         boost = 1
 
-        if state["button9"]:
-            boost *= 10
-        if state["button10"]:
-            boost *= 10
+        try:
+            if state["button9"]:
+                boost *= 10
+            if state["button10"]:
+                boost *= 10
+        except Exception:
+            print("cannot read button state")
 
         for master in self.masters:
             if master.axis_id not in state:
