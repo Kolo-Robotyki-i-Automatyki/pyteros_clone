@@ -16,6 +16,7 @@ class TiSapphireWorker(DeviceWorker):
     def init_device(self):
         import serial
         self.ser = serial.Serial('COM6', 9600, timeout=5)  #opens serial port COM3
+        self.motor_pos = None
         
     def __del__(self):
         self.ser.close() #serial port close
@@ -27,7 +28,8 @@ class TiSapphireWorker(DeviceWorker):
         front-end class."""
         d = super().status()
         d["connected"] = True
-        print(d)
+        d["wavelength"] = self.get_wavelength()
+        d["motor_position"] = self.get_position()
         return d
 
         
@@ -46,6 +48,7 @@ class TiSapphireWorker(DeviceWorker):
     @remote
     def goto(self, position):
         '''Motor moves to absolute position which is the method argument'''
+        position = int(position)
         self.ser.write(b'ma' + str(position).encode('ascii') + b'\n')
         
     @remote
@@ -54,6 +57,38 @@ class TiSapphireWorker(DeviceWorker):
         self.ser.write(b'tp\n')
         self.ret = self.ser.readline()
         return self.ret.decode('ascii')
+
+    @remote
+    def set_position(self, pos):
+        return self.goto(pos)
+
+    @remote
+    def set_wavelength(self, nm):
+        pos = self.wavelength_to_position(nm)
+        self.set_position(pos)
+
+    @remote
+    def get_position(self, ignore_buffer=False):
+        if ignore_buffer or self.motor_pos is None:
+            self.ser.write(b'tp\n')
+            ret = self.ser.readline().decode('ascii')
+            if ret[0:2].lower() != 'tp':
+                raise Exception("Invalid reply from the device. Expected tp, received: %s" %ret)
+            self.motor_pos = int(ret[2:])        
+        return self.motor_pos
+
+    @remote
+    def get_wavelength(self, ignore_buffer=False):
+        pos = self.get_position(ignore_buffer)
+        return self.position_to_wavelength(pos)
+
+    def position_to_wavelength(self, pos):
+        return 724.617 - 6.01328e-4 * pos -9.10299e-10 * pos**2
+
+    def wavelength_to_position(self, nm):
+        return 3.81136e7 - 153870.05478 * nm + 209.32328 * nm**2 -0.096* nm**3
+        
+    
     
 @include_remote_methods(TiSapphireWorker)
 class TiSapphire(DeviceOverZeroMQ):  
@@ -80,7 +115,7 @@ class TiSapphire(DeviceOverZeroMQ):
     def updateSlot(self, status):
         pass
     
-    def initUI(self, widget):
+    def initUI(self, widget, motor):
         title = '<center><h2>Hello!<\h2><\center>'
         intro = '<center><font-size = "14">My name is titanium-sapphire laser.<br> I am able to emit light of 710-800 nm. <br> Press start to commence our adventure.<br><\font>'
 
@@ -91,12 +126,12 @@ class TiSapphire(DeviceOverZeroMQ):
         self.font.setPointSize(10)
         self.intro.setFont(self.font)
         
-        tell_position_btn = QPushButton('Position', self)
+        tell_position_btn = QPushButton('Position', widget)
         tell_position_btn.resize(tell_position_btn.sizeHint())
         tell_position_btn.setStyleSheet("background-color:rgb(210, 242, 223)")
         tell_position_btn.clicked.connect(self.position_window)
         
-        start_btn = QPushButton('Start', self)
+        start_btn = QPushButton('Start', widget)
         start_btn.resize(start_btn.sizeHint())
         start_btn.setStyleSheet("background-color:rgb(252, 227, 244)")
         start_btn.clicked.connect(self.wavelength_window)
@@ -112,7 +147,7 @@ class TiSapphire(DeviceOverZeroMQ):
           
         widget.setAutoFillBackground(True)
         p = widget.palette()
-        p.setColor(self.backgroundRole(), QColor(220, 229, 228))
+        p.setColor(widget.backgroundRole(), QColor(220, 229, 228))
         widget.setPalette(p)
         
     def position_window(self):
@@ -124,8 +159,7 @@ class TiSapphire(DeviceOverZeroMQ):
         '''This method opens the window of class Wavelength where user enters expected wavelength. 
         In case of any problem with motor power after last use, the programm shows warning window of class
         Warn'''
-        self.motor = motor
-        if self.motor.tf() == b'TF64\r\n':
+        if self.tf() == b'TF64\r\n':
             self.alarm = Warn(self)
             self.alarm.exec_()
         else:
@@ -228,8 +262,7 @@ class Tell_Position(QWidget):
         
     def initUI(self, motor):
         '''Position parameters shown. Calculates using motor position thanks to function whereareyou'''
-        self.motor_position_answer = str(motor.whereareyou())
-        self.motor_position = self.motor_position_answer[4:-5]
+        self.motor_position = self.motor.get_position()
         self.wavelength = 724.617 - 6.01328 * float(self.motor_position) * pow(10, -4) -9.10299 * float(self.motor_position) * float(self.motor_position) * pow(10, -10)
         self.screw = -860.06621 + 3.49860397 * float(self.wavelength) - 0.004764992 * float(self.wavelength) * float(self.wavelength) + 2.18853868 * float(self.wavelength) * float(self.wavelength) * float(self.wavelength) * pow(10, -6)
         

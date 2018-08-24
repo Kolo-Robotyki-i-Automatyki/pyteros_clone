@@ -92,6 +92,7 @@ if __name__ == '__main__':
         window.kernel_client.execute('devices.load_devices()')
         window.kernel_client.execute('globals().update(devices.active_devices)')
         window.kernel_client.execute('print(list(devices.active_devices))')
+        window.kernel_client.execute('from src.measurement_file import MeasurementFile')
         
         for _,device in devices.active_devices.items():
             try:
