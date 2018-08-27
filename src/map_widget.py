@@ -5,7 +5,9 @@ import math
 from PyQt5 import QtWidgets, QtGui, QtCore, QtSvg
 from collections import OrderedDict
 import jsonpickle
+import numpy
 
+epsilon = 0.000000001
 
 class ZoomableGraphicsView(QtWidgets.QGraphicsView):
     def __init__(self, parent=None):
@@ -351,8 +353,6 @@ class MapAreaItem(QtWidgets.QGraphicsItem):
         self.scene = parent.scene
         self.setZValue(10)
 
-        self.epsilon = 0.0000000001
-
         self.scene.addItem(self)
 
         self.setAcceptHoverEvents(True)
@@ -366,6 +366,9 @@ class MapAreaItem(QtWidgets.QGraphicsItem):
         self.widget.setFrameShape(QtWidgets.QFrame.Box)
         self.widget.setLayout(layout)
         self.widget.setSizePolicy(QtWidgets.QSizePolicy())
+
+        self.label_map_size = QtWidgets.QLabel()
+        layout.addWidget(self.label_map_size, 0, 0, 1, 2)
 
         self.sides = OrderedDict(
             [("x", -100), ("y", 100), ("width", 200), ("height", 150), ("rotation", 0), ("step_x", 10), ("step_y", 10)])
@@ -383,6 +386,12 @@ class MapAreaItem(QtWidgets.QGraphicsItem):
             self.edits[s] = edit
             col += 1
 
+        for s in self.sides:
+            self.edits[s].textChanged.connect(self.update_label_map_size)
+            self.edits[s].textChanged.connect(self.parent.update_label_total_map_count)
+
+        self.update_label_map_size()
+        self.parent.update_label_total_map_count()
         self.update_transform()
 
     def set_parameter(self, parameter, value):
@@ -502,16 +511,38 @@ class MapAreaItem(QtWidgets.QGraphicsItem):
             self.scene.update()
             self.update()
 
+    def map_origin(self): #defines offset of grid of map points, in map area coordinates
+        if self.parent.check_box_snap.isChecked():
+            a = math.radians(self.get_parameter("rotation"))
+            x = self.get_parameter("x")
+            y = self.get_parameter("y")
+            return (- x * math.cos(a) - y * math.sin(a), - y * math.cos(a) + x * math.sin(a))
+        else:
+            return (0, 0)
+
+    def map_area_parameters(self):
+        x0, y0 = self.map_origin()
+        width = self.get_parameter("width")
+        height = self.get_parameter("height")
+        step_x = self.get_parameter("step_x")
+        step_y = self.get_parameter("step_y")
+        end_x = math.floor((width - x0) / step_x + epsilon + 1)
+        end_y = math.floor((height - y0) / step_y + epsilon + 1)
+        begin_x = math.floor((-x0) / step_x - epsilon + 1)
+        begin_y = math.floor((-y0) / step_y - epsilon + 1)
+        rotation = self.get_parameter("rotation")
+        return (x0, y0, width, height, step_x, step_y, end_x, end_y, begin_x, begin_y, rotation)
+
+    def update_label_map_size(self):
+        end_x, end_y, begin_x, begin_y = self.map_area_parameters()[6:10]
+        s = str(end_x - begin_x) + "x" + str(end_y - begin_y) + ", total: " + str((end_x - begin_x)*(end_y - begin_y))
+        self.label_map_size.setText(s)
+
     def paint(self, painter, option, widget=None):
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         zoom = option.levelOfDetailFromTransform(painter.worldTransform())
 
         self.update_border_rect(zoom)
-
-        width = self.get_parameter("width")
-        height = self.get_parameter("height")
-        step_x = self.get_parameter("step_x")
-        step_y = self.get_parameter("step_y")
 
         pen = QtGui.QPen()
         pen.setCosmetic(True)  # fixed width regardless of transformations
@@ -522,41 +553,37 @@ class MapAreaItem(QtWidgets.QGraphicsItem):
         if self.hover != None:
             painter.drawRect(self.border_rect[self.hover])
 
-        max_grid = max(zoom * step_x, zoom * step_y)
-        min_grid = min(zoom * step_x, zoom * step_y)
+        max_grid = max(zoom * self.get_parameter("step_x"), zoom * self.get_parameter("step_y"))
+        min_grid = min(zoom * self.get_parameter("step_x"), zoom * self.get_parameter("step_y"))
         if max_grid > 6 and min_grid > 3:
+
+            x0, y0, width, height, step_x, step_y, end_x, end_y, begin_x, begin_y, rotation = self.map_area_parameters()
+
             pen = QtGui.QPen()
             pen.setCosmetic(True)  # fixed width regardless of transformations
             pen.setColor(QtGui.QColor(255, 0, 0))
             pen.setWidth(max(2, min(7, max_grid / 5)))
             painter.setPen(pen)
 
-            # calculate which area of map rectangle is visible on screen
-            visible_rect = self.parent.viewwidget.mapToScene(
-                self.parent.viewwidget.viewport().geometry()).boundingRect()
-
-            nx = int(width / step_x + self.epsilon + 1)
-            ny = int(height / step_y + self.epsilon + 1)
-            if nx * ny < 100000:
-                for ix in range(nx):
-                    for iy in range(ny):
-                        painter.drawPoint(QtCore.QPointF(step_x * ix, step_y * iy))
+            if (end_x - begin_x) * (end_y - begin_y) < 100000:
+                for ix in range(begin_x, end_x):
+                    for iy in range(begin_y, end_y):
+                        painter.drawPoint(QtCore.QPointF(step_x * ix + x0, step_y * iy + y0))
 
     def get_positions(self):
         positions = []
-        width = self.get_parameter("width")
-        height = self.get_parameter("height")
-        step_x = self.get_parameter("step_x")
-        step_y = self.get_parameter("step_y")
+        x0, y0, width, height, step_x, step_y, end_x, end_y, begin_x, begin_y, rotation = self.map_area_parameters()
         if (step_x > 0 and step_y > 0):
-            nx = int(width / step_x + epsilon + 1)
-            ny = int(height / step_y + epsilon + 1)
+            nx = end_x - begin_x
+            ny = end_y - begin_y
             if nx * ny <= 1000000:
-                for ix in range(nx):
-                    for iy in range(ny):
-                        point = QtCore.QPointF(step_x * ix, step_y * iy)
-                        point_global = self.transform().map(point)
-                        positions.append(point_global.x(), point_global.y())
+                for ix in range(begin_x, end_x):
+                    for iy in range(begin_y, end_y):
+                        x = step_x * ix + x0
+                        y = step_y * iy + y0
+                        global_x = self.get_parameter("x") + x * math.cos(math.radians(rotation)) - y * math.sin(math.radians(rotation))
+                        global_y = self.get_parameter("y") + y * math.cos(math.radians(rotation)) + x * math.sin(math.radians(rotation))
+                        positions.append((global_x, global_y))
         return positions
 
 
@@ -588,20 +615,30 @@ class MapWidget(QtWidgets.QWidget):
         self.map_area_scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
         self.map_area_scroll.setWidgetResizable(True)
         map_area_scroll_frame = QtWidgets.QFrame(self.map_area_scroll)
-        self.map_area_layout = QtWidgets.QVBoxLayout()
-        map_area_scroll_frame.setLayout(self.map_area_layout)
         self.map_area_scroll.setWidget(map_area_scroll_frame)
-        self.map_area_scroll.setFixedWidth(210)
+        self.map_area_scroll.setFixedWidth(175)
         self.map_area_scroll.setVisible(False)
         map_area_buttons_layout = QtWidgets.QHBoxLayout()
+
+        self.map_area_layout = QtWidgets.QVBoxLayout()
+        map_area_scroll_frame.setLayout(self.map_area_layout)
+
+        self.label_total_map_count = QtWidgets.QLabel()
+        self.map_area_layout.addWidget(self.label_total_map_count)
+
+        self.check_box_snap = QtWidgets.QCheckBox("Snap to grid")
+        self.check_box_snap.setChecked(True)
+        self.map_area_layout.addWidget(self.check_box_snap)
         self.map_area_layout.addLayout(map_area_buttons_layout)
         self.map_area_layout.addStretch(10)
         
         self.map_area_items = []
-        self.button_add_map_area = QtWidgets.QPushButton("Add Map Area")
+        self.button_add_map_area = QtWidgets.QPushButton("Add")
+        self.button_add_map_area.setFixedWidth(65)
         map_area_buttons_layout.addWidget(self.button_add_map_area)
         self.button_add_map_area.clicked.connect(self.add_map_area)
-        self.button_delete_map_area = QtWidgets.QPushButton("Delete Map Area")
+        self.button_delete_map_area = QtWidgets.QPushButton("Delete")
+        self.button_delete_map_area.setFixedWidth(65)
         map_area_buttons_layout.addWidget(self.button_delete_map_area)
         self.button_delete_map_area.setEnabled(False)
         self.button_delete_map_area.clicked.connect(self.delete_map_area)
@@ -661,6 +698,29 @@ class MapWidget(QtWidgets.QWidget):
         hlayout4.addWidget(self.startButton)
         hlayout4.addStretch(1)
         layout.addLayout(hlayout4)
+
+    def update_label_total_map_count(self):
+        points = []
+        for map_area in self.map_area_items:
+            points += map_area.get_positions()
+        order_function =  lambda p: p[0] * 100 * numpy.pi + p[1]
+        points.sort(key = order_function) # low probability of equal points
+        if len(points) == 0:
+            unique = []
+        else:
+            unique = [points[0]]
+            for i in range(1, len(points)):
+                duplicate = False
+                j = -1
+                while j >= - len(unique) and order_function(unique[j]) > order_function(points[i]) - epsilon:
+                    if math.sqrt((unique[j][0] - points[i][0]) ** 2 + (unique[j][1] - points[i][1]) ** 2) < epsilon:
+                        duplicate = True
+                        break
+                    j -= 1
+                if not duplicate:
+                    unique.append(points[i])
+
+        self.label_total_map_count.setText(str(len(unique)) + " points total.")
 
     def add_map_area(self):
         if len(self.map_area_items) == 0:
