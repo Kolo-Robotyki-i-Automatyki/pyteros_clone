@@ -41,7 +41,9 @@ def include_remote_methods(worker_class):
         for name in dir(worker_class):
             try:
                 if getattr(worker_class,name).accessible_remotely:
-                    setattr(frontend_class, name, _makeFun(name))
+                    fun = _makeFun(name)
+                    fun.__doc__ = getattr(worker_class,name).__doc__
+                    setattr(frontend_class, name, fun)
             except:
                 pass
         return frontend_class

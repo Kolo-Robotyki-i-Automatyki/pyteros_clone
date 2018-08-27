@@ -347,7 +347,7 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
 
 
 class MapAreaItem(QtWidgets.QGraphicsItem):
-    def __init__(self, parent):
+    def __init__(self, parent, x=-100, y=200, width=200, height=150, step_x=10, step_y=10):
         super().__init__()
         self.parent = parent
         self.scene = parent.scene
@@ -371,7 +371,7 @@ class MapAreaItem(QtWidgets.QGraphicsItem):
         layout.addWidget(self.label_map_size, 0, 0, 1, 2)
 
         self.sides = OrderedDict(
-            [("x", -100), ("y", 100), ("width", 200), ("height", 150), ("rotation", 0), ("step_x", 10), ("step_y", 10)])
+            [("x", x), ("y", y), ("width", width), ("height", height), ("rotation", 0), ("step_x", step_x), ("step_y", step_y)])
         self.edits = OrderedDict([])
 
         col = 1
@@ -699,10 +699,7 @@ class MapWidget(QtWidgets.QWidget):
         hlayout4.addStretch(1)
         layout.addLayout(hlayout4)
 
-    def update_label_total_map_count(self):
-        points = []
-        for map_area in self.map_area_items:
-            points += map_area.get_positions()
+    def delete_duplicated_points(self, points):
         order_function =  lambda p: p[0] * 100 * numpy.pi + p[1]
         points.sort(key = order_function) # low probability of equal points
         if len(points) == 0:
@@ -719,18 +716,47 @@ class MapWidget(QtWidgets.QWidget):
                     j -= 1
                 if not duplicate:
                     unique.append(points[i])
+        return unique
 
+    def update_label_total_map_count(self):
+        points = []
+        for map_area in self.map_area_items:
+            new_points = map_area.get_positions()
+            if len(new_points) > 30000:
+                self.label_total_map_count.setText(">30000 points total.")
+                return
+            points += new_points
+        unique = self.delete_duplicated_points(points)
         self.label_total_map_count.setText(str(len(unique)) + " points total.")
 
     def add_map_area(self):
         if len(self.map_area_items) == 0:
             self.button_delete_map_area.setEnabled(True)
-        map_area = MapAreaItem(self)
+
+        tr = self.viewwidget.mapToScene(QtCore.QPoint(self.viewwidget.width(), 0))
+        bl = self.viewwidget.mapToScene(QtCore.QPoint(0, self.viewwidget.height()))
+        w = (tr.x() - bl.x()) / 3
+        h = (tr.y() - bl.y()) / 3
+        x = bl.x() + w
+        y = bl.y() + h
+        print(x, y, w, h)
+        step = max(10 ** math.floor(math.log10(min(w, h) / 10)), \
+                   2 * 10 ** math.floor(math.log10(min(w, h) / 10 / 2)), \
+                   5 * 10 ** math.floor(math.log10(min(w, h) / 10 / 5)))
+        x = step * math.floor(x / step)
+        y = step * math.floor(y / step)
+        w = step * math.floor(w / step)
+        h = step * math.floor(h / step)
+        print(x, y, w, h, step)
+
+        map_area = MapAreaItem(self, x, y, w, h, step, step)
+
         self.map_area_layout.removeItem(self.map_area_layout.itemAt(\
             self.map_area_layout.count() - 1))
         self.map_area_layout.insertWidget(-3, map_area.widget)
         self.map_area_layout.addStretch(10)
         self.map_area_items.append(map_area)
+        self.update_label_total_map_count()
 
     def delete_map_area(self):
         if len(self.map_area_items) == 1:
