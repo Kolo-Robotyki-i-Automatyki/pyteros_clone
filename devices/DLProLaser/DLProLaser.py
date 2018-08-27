@@ -9,7 +9,7 @@ from PyQt5 import QtWidgets,QtCore
 import TMCL
 import toptica.lasersdk.client as top
 
-default_req_port = 7123
+default_req_port  = 7123
 default_pub_port = 7124
 
 class DLProWorker(DeviceWorker):
