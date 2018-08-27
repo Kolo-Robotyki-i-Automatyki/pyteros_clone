@@ -5,6 +5,7 @@
 from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,remote,include_remote_methods
 from PyQt5 import QtWidgets,QtCore
 import numpy as np
+import time
 
 class PowermeterWorker(DeviceWorker):
     '''Generic power meter. Subclassed for specific device'''          
@@ -30,48 +31,66 @@ class PowermeterWorker(DeviceWorker):
 
 
 class LabMaxWorker(PowermeterWorker):
-    def __init__(self, *args, port='usb', **kwargs):
+    def __init__(self, *args, port='usb', meter_index=0, **kwargs):
         '''Port specifies the interface, e.g. 'usb', 'COM1', 'gpib' '''
         super().__init__(*args, **kwargs)
         if port.lower() in ('usb','gpib'):
             self.interface = port.lower()
+            self.meter_index = meter_index
         else:
             self.interface = 'rs232'
             self.portname = port
-                
+            
+    unit = "W"
+            
     def init_device(self):
         if self.interface == 'rs232':
             import serial
-            self.port = serial.Serial(self.portname, baudrate=19200)
+            self.ser = serial.Serial(self.portname, baudrate=19200)
         else:
-            raise NotImplementedError("USB and GPIB transfer not implemented yet")
-            
-        #*IDN
-        #SYSTem:STATus?
-        #CONFigure:READings:CONTinuous?
-        #CONFigure:READings:SEND?
+            import devices.laser.LabMaxLowLevelControl as LM
+            import win32com
+            self.ctl = win32com.client.Dispatch(LM.CLabMaxLowLevCtl.CLSID)
+            self.ctl.Initialize()
+            self.ctl.CommunicationMode = LM.constants.COM_MODE_USB
+            ret = self.ctl.ConnectToMeter(self.meter_index)
+            if ret == 1:
+                print("Probably OK")
+            else:
+                print("Probably not OK")
+           
+        self.send_command("CONF:REAT:CONT LAST")
+        self.send_command("ABOR")
+        self.send_command("INIT")
+        
+    def deinit_device(self):
+        self.ctl.DeInitialize()
         
     def send_command(self, cmd):
-        query = cmd.endswith('?')
-        cmd += '\n'
-        res = None
         if self.interface == 'rs232':
-            serial.write(cmd.encode('ascii'))
+            query = cmd.endswith('?')
+            cmd += '\n'
+            self.ser.write(cmd.encode('ascii'))
             if query:
-                res = serial.readline().decode('ascii').strip()
+                return self.ser.readline().decode('ascii').strip()
         else:
-            raise NotImplementedError("USB and GPIB transfer not implemented yet")
-        return res
+            self.ctl.SendCommandOrQuery(self.meter_index, cmd)
+            time.sleep(0.03)
+            return self.ctl.GetNextString(self.meter_index)
     
     def get_power(self):
-        self.send_command("FETCh:ALL?")
-        #TODO
-        return 0
+        try:
+            ret = self.send_command("FETC:ALL?")
+            return float(ret.split(',')[0])
+        except:
+            return np.nan
         
     def get_wavelength(self):
-        #TODO
-        self.send_command('CONF:WAVEl:WAVE?')
-        return 0
+        try:
+            ret = self.send_command('CONF:WAVE:WAVE?')
+            return float(ret)
+        except:
+            return np.nan
     
 @include_remote_methods(PowermeterWorker)
 class Powermeter(DeviceOverZeroMQ):      
@@ -98,7 +117,7 @@ class Powermeter(DeviceOverZeroMQ):
             
         # Following lines "turn on" the widget operation
         self.createListenerThread(self.updateSlot)
-
+        
         
     def updateSlot(self, status):
         self.display_power.setText("%g %s" % (status["power"],status["unit"]))
