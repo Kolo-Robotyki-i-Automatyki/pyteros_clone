@@ -25,7 +25,9 @@ class DLProWorker(DeviceWorker):
         import serial
         self.ser = serial.Serial('COM16', 9600, timeout=5)  #opens serial port COM16
         self.wavemeter = Wavemeter(req_port=self.wm_req_port, pub_port=self.wm_pub_port)
-        
+        self.bus = TMCL.connect(self.ser)
+        self.module = self.bus.get_module(1)
+        self.motor = self.module.get_motor(2)
     def __del__(self):
         self.ser.close() #serial port close
         
@@ -59,19 +61,15 @@ class DLProWorker(DeviceWorker):
     @remote
     def motor_position(self):
         
-        bus = TMCL.connect(self.ser)
-        module = bus.get_module(1)
-        motor = module.get_motor(2)
-        return motor.axis.actual_position
+        
+        return self.motor.axis.actual_position
     @remote
     def motor_get_wavelength(self):
         return ((0.00013*(self.motor_position()-600000)) + 517.295)
     @remote
     def motor_set_wavelength(self, wavelength):
-        bus = TMCL.connect(self.ser)
-        module = bus.get_module(1)
-        motor = module.get_motor(2)
-        motor.move_absolute(((wavelength-517.295) / 0.00013) + 600000)
+        
+        self.motor.move_absolute(int(((wavelength-517.295) / 0.00013) + 600000))
 
     
 @include_remote_methods(DLProWorker)
