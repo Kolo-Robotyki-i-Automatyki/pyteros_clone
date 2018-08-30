@@ -91,10 +91,24 @@ class LabMaxWorker(PowermeterWorker):
             return float(ret)
         except:
             return np.nan
+
+
+def _factor_W(s):
+    if s == 'mW':
+        return 1e-3
+    elif s == "µW":
+        return 1e-6
+    elif s == "nW":
+        return 1e-9
+    else:
+        return 1
+
     
 @include_remote_methods(PowermeterWorker)
 class Powermeter(DeviceOverZeroMQ):      
-          
+    unit = "mW"
+      
+    
     def createDock(self, parentWidget, menu=None):
         dock = QtWidgets.QDockWidget("Powermeter", parentWidget)
         widget = QtWidgets.QWidget(parentWidget)
@@ -103,8 +117,11 @@ class Powermeter(DeviceOverZeroMQ):
         widget.setLayout(layout)
         
         self.display_power = QtWidgets.QLineEdit()
-        self.display_power.setEnabled(False)
-        self.display_power.setMaximumWidth(100)
+        self.display_power.setReadOnly(True)
+        self.display_power.setMinimumWidth(120)
+        self.display_power.setMaximumWidth(120)
+        self.display_power.setAlignment(QtCore.Qt.AlignRight)
+        self.display_power.mousePressEvent = self._pick_unit
         layout.addWidget(QtWidgets.QLabel('Power:'))
         layout.addWidget(self.display_power)
         layout.addStretch()
@@ -119,5 +136,32 @@ class Powermeter(DeviceOverZeroMQ):
         self.createListenerThread(self.updateSlot)
         
         
+    def _pick_unit(self, event):
+        dialog = QtWidgets.QDialog(self.display_power)
+        dialog.setWindowTitle("Select unit")
+        layout = QtWidgets.QVBoxLayout(dialog)
+        dialog.setLayout(layout)
+        options = ("W", "mW", "µW", "nW")
+        buttons = [QtWidgets.QRadioButton(txt, dialog) for txt in options]
+        for button in buttons:
+            layout.addWidget(button)
+            if button.text() == self.unit:
+                button.setChecked(True)
+        layout.addStretch()
+        buttonBox = QtWidgets.QDialogButtonBox(dialog)
+        buttonBox.setOrientation(QtCore.Qt.Horizontal)
+        buttonBox.setStandardButtons(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        buttonBox.accepted.connect(dialog.accept)
+        buttonBox.rejected.connect(dialog.reject)
+        layout.addWidget(buttonBox)
+        dialog.setModal(True)
+        dialog.show()
+        if dialog.exec_():
+            for button in buttons:
+                if button.isChecked():
+                    self.unit = button.text()
+        
+        
     def updateSlot(self, status):
-        self.display_power.setText("%g %s" % (status["power"],status["unit"]))
+        scaled = status["power"] /_factor_W(self.unit) * _factor_W(status["unit"])
+        self.display_power.setText("%.1f %s" % (scaled, self.unit))

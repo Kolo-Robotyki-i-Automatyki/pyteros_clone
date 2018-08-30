@@ -104,7 +104,10 @@ class MeasurementFile:
         #now we start actual saving:
         if type(value) == dict:
             self._save_subgroup(group, name, value)
-        elif type(value) in (int, float, bool, ndarray):
+        elif type(value) in (int, float, bool, np.float, np.float16, np.float32, 
+                             np.float64, np.int, np.int8, np.int16, np.int32, 
+                             np.int64, np.uint, np.uint8, np.uint16, np.uint32, 
+                             np.uint64, np.ndarray):
             value = array(value)
             newshape = (self.n,) + value.shape
             if name not in group:
