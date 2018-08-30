@@ -36,12 +36,13 @@ class ZMQ_Listener(QtCore.QObject):
 
 
 class WidgetForProcess(QtWidgets.QWidget):
-    def __init__(self, req_port, pub_port, process_class = WorkerForDummyDevice):
+    def __init__(self, req_port, pub_port, process_class = WorkerForDummyDevice, **kwargs):
         super().__init__()
         
         self.req_port = req_port
         self.pub_port = pub_port
         self.process_class = process_class
+        self.kwargs = kwargs
         
         zmq_context = zmq.Context()
         self.sub_socket = zmq_context.socket(zmq.SUB)
@@ -73,7 +74,7 @@ class WidgetForProcess(QtWidgets.QWidget):
         textedit = QtWidgets.QTextEdit()
         textedit.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
         layout.addWidget(textedit)
-        self.setLayout(layout)
+        self.setLayout(layout)  
         
         def appendErr(text):
             textedit.setTextColor(QtGui.QColor(255,0,0))
@@ -104,7 +105,7 @@ class WidgetForProcess(QtWidgets.QWidget):
             self.process = None
 
     def createProcess(self):
-        return self.process_class(req_port = self.req_port, pub_port = self.pub_port)
+        return self.process_class(req_port = self.req_port, pub_port = self.pub_port, **self.kwargs)
 
     def startProcess(self, start = True):
         if start:
