@@ -39,7 +39,6 @@ class ANC350Worker(DeviceWorker):
     def __init__(self, req_port=default_req_port, pub_port=default_pub_port, **kwargs):
         super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
         self.connected = False
-        self.dll = ct.windll.LoadLibrary("hvpositionerv2.dll")
 
     def status(self):
         d = super().status()
@@ -49,6 +48,7 @@ class ANC350Worker(DeviceWorker):
         return d
 
     def init_device(self):
+        self.dll = ct.windll.LoadLibrary("hvpositionerv2.dll")
         if self.connected:
             return
         class positionerinfo(ct.Structure):
