@@ -39,6 +39,8 @@ class ANC350Worker(DeviceWorker):
     def __init__(self, req_port=default_req_port, pub_port=default_pub_port, **kwargs):
         super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
         self.connected = False
+        self.axesList = []
+        self.axisDirection = {}
 
     def status(self):
         d = super().status()
@@ -68,8 +70,6 @@ class ANC350Worker(DeviceWorker):
             self.dll.PositionerStopDetection(self.handle, ct.c_int32(axis), \
                                              ct.c_bool(False))
         time.sleep(0.5)
-        self.axesList = []
-        self.axisDirection = {}
         for axis in range(9):
             if self.axisPos(axis) != 0:
                 self.axisDirection[axis] = 0
