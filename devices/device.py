@@ -51,9 +51,49 @@ active_devices = {}
 import importlib
 import sys,traceback
 
-def load_devices():
+
+
+
+def load_devices(use_gui=False, parent=None):
     config = configparser.ConfigParser()
     config.read('devices.ini')
+    sections = [config[name] for name in config.sections()]
+    for section in sections:
+        try:
+            if section['enabled'].lower() in ['true', '1', 't', 'y', 'yes']:
+                section.enabled = True
+            else:
+                section.enabled = False
+        except:
+            section.enabled = True
+           
+    if use_gui:
+        from PyQt5 import QtWidgets
+        dialog = QtWidgets.QDialog(parent)
+        dialog.setWindowTitle("Select devices")
+        layout = QtWidgets.QVBoxLayout()
+        dialog.setLayout(layout)
+        for section in sections:
+            checkbox = QtWidgets.QCheckBox(section.name)
+            checkbox.setChecked(section.enabled)
+            section.checkbox = checkbox
+            layout.addWidget(checkbox)
+        buttonbox = QtWidgets.QDialogButtonBox()
+        buttonbox.addButton("Start", QtWidgets.QDialogButtonBox.AcceptRole)
+        buttonbox.accepted.connect(dialog.accept)
+        layout.addWidget(buttonbox)
+        result = dialog.exec_()
+        changed = False
+        for section in sections:
+            oldstate = section.enabled
+            section.enabled = section.checkbox.isChecked()
+            if oldstate ^ section.enabled:
+                changed = True
+            section['enabled'] = str(section.enabled).lower()
+        if changed:
+            with open('devices.ini', 'w') as configfile:
+                config.write(configfile)
+    
     for section in config.sections():
         try:
             items = dict(config.items(section))
@@ -71,6 +111,7 @@ def load_devices():
         except Exception as e:
             print("Loading device %s failed." % section)
             traceback.print_exc(file=sys.stdout)
+
 
 def load_workers():
     config = configparser.ConfigParser()

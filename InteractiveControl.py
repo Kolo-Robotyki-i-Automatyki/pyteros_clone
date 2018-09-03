@@ -86,12 +86,15 @@ if __name__ == '__main__':
     def run_app():
         app = QtWidgets.QApplication(sys.argv)
         window = MainWindow()
+        window.show()
         
-        devices.load_devices()
+        devices.load_devices(use_gui=True, parent=window)
         window.kernel_client.execute('import devices')
         window.kernel_client.execute('devices.load_devices()')
         window.kernel_client.execute('globals().update(devices.active_devices)')
         window.kernel_client.execute('print(list(devices.active_devices))')
+        window.kernel_client.execute('import time')
+        window.kernel_client.execute('import numpy as np')
         window.kernel_client.execute('from src.measurement_file import MeasurementFile')
         
         for _,device in devices.active_devices.items():
