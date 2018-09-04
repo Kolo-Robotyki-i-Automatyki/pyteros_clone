@@ -133,13 +133,7 @@ class JoystickControlWidget(QtWidgets.QWidget):
                     self.slaves.append(Slave(apt, description, serial, step=False))
         except Exception as e:
             print(e)
-        try:
-            from ..thorlabs.apt import APT
-            for name, apt in {k: v for k, v in self.device_list.items() if isinstance(v, APT)}.items():
-                for serial in apt.devices():
-                    self.slaves.append(_create_apt_slave(apt, name, serial))
-        except Exception as e:
-            print(e)
+        
         try:
             from ..attocube.anc350 import ANC350
             for name, anc350 in {k: v for k, v in self.device_list.items() if isinstance(v, ANC350)}.items():
