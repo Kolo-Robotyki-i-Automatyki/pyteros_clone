@@ -38,6 +38,31 @@ class Master():
         self.checkInverted.setChecked(params[1])
         self.editSpeed.setText(params[2])
 
+class Slave():
+    def __init__(self, device, description, axis=None, step=False):
+        self.device = device
+        self.description = description
+        self.axis = axis
+        self.step = step
+        self.velocity = 0
+        self.last_velocity = 0
+
+    def execute(self):
+        if self.step == False:
+            if self.axis != None:
+                self.device.moveVelocity(self.axis, self.velocity)
+                self.velocity = 0
+            else:
+                self.device.moveVelocity(self.velocity)
+                self.velocity = 0
+        else:
+            self.velocity = 0
+
+    def add_change(self, v):
+        self.velocity += v
+
+
+
 class JoystickControlWidget(QtWidgets.QWidget):
     """ A widget for interactive control of APT motors or attocube axes using XBoxPad """
     
@@ -68,7 +93,19 @@ class JoystickControlWidget(QtWidgets.QWidget):
              ("r_thumb_x", "Right stick horizontal"),
              ("r_thumb_y", "Right stick vertical"),
              ('left_trigger', "Left trigger"),
-             ('right_trigger', "Right trigger")]
+             ('right_trigger', "Right trigger"),
+             ("button1", "D-pad up button"),
+             ("button2", "D-pad down button"),
+             ("button3", "D-pad left button"),
+             ("button4", "D-pad right button"),
+             ("button5", "START (arrow right)"),
+             ("button6", "BACK (arrow left)"),
+             ("button7", "Left stick button"),
+             ("button8", "Right stick button"),
+             ("button13" ,"A button"),
+             ("button14" ,"B button"),
+             ("button15" ,"X button"),
+             ("button16" ,"Y button")]
     
 
     def refreshCombos(self):
@@ -76,9 +113,8 @@ class JoystickControlWidget(QtWidgets.QWidget):
             n = master.combo.currentIndex()
             master.combo.clear()
             master.combo.addItem("None")
-            for s in self.slaves:
-                master.combo.addItem(s[0])
-            #master.combo.setCurrentIndex(n)
+            for slave in self.slaves:
+                master.combo.addItem(slave.description)
             master.combo.setCurrentText(master.comboRecentValid)
 
     
@@ -87,7 +123,7 @@ class JoystickControlWidget(QtWidgets.QWidget):
         """ Search through list of devices to find usable slaves to be controlled"""
         self.start(False)
         self.slaves = []
-
+        '''
         try:
             from ..thorlabs.apt import APT
             for name, apt in {k: v for k, v in self.device_list.items() if isinstance(v, APT)}.items():
@@ -95,15 +131,15 @@ class JoystickControlWidget(QtWidgets.QWidget):
                     self.slaves.append(_create_apt_slave(apt, name, serial))
         except Exception as e:
             print(e)
-
+        '''
         try:
             from ..attocube.anc350 import ANC350
             for name, anc350 in {k: v for k, v in self.device_list.items() if isinstance(v, ANC350)}.items():
                 for axis in anc350.axes():
-                    self.slaves.append(_create_anc350_slave(anc350, name, axis))
+                    description = "Attocube %s axis: %d" % (name, axis)
+                    self.slaves.append(Slave(anc350, description, axis, step=False))
         except Exception as e:
             print(e)
-
 
         self.refreshCombos()
 
@@ -136,9 +172,9 @@ class JoystickControlWidget(QtWidgets.QWidget):
         self.startButton.clicked.connect(self.start)
         self.startButton.clicked.connect(self.saveSettings)
         buttonlayout.addWidget(self.startButton)
-        layout.addLayout(buttonlayout, len(self.masters)+2,0,1,6)
+        layout.addLayout(buttonlayout, len(self.masters) + 2, 0, 1, 6)
         layout.setColumnStretch(5,6)
-        layout.setRowStretch(10,6)
+        layout.setRowStretch(len(self.masters) + 1, 16)
 
     def loadSettings(self):
         try:
@@ -172,7 +208,7 @@ class JoystickControlWidget(QtWidgets.QWidget):
                 master.combo.setEnabled(True)
                 slave_nr = master.combo.currentIndex() - 1
                 if slave_nr >= 0:
-                    self.slaves[slave_nr][1](0)
+                    self.slaves[slave_nr].execute() # set zero value
             
     def timeout(self):
         if not self.active:
@@ -202,5 +238,9 @@ class JoystickControlWidget(QtWidgets.QWidget):
                 value *= float(master.editSpeed.text()) * boost
             slave_nr = master.combo.currentIndex() - 1
             if slave_nr >= 0:
-                self.slaves[slave_nr][1](value)
+                self.slaves[slave_nr].add_change(value)
+
+        for slave in self.slaves:
+            slave.execute()
+
         self.timer.start(80)
