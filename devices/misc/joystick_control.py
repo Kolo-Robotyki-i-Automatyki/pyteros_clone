@@ -133,7 +133,7 @@ class JoystickControlWidget(QtWidgets.QWidget):
                     self.slaves.append(Slave(apt, description, serial, step=False))
         except Exception as e:
             print(e)
-        
+
         try:
             from ..attocube.anc350 import ANC350
             for name, anc350 in {k: v for k, v in self.device_list.items() if isinstance(v, ANC350)}.items():
@@ -220,19 +220,22 @@ class JoystickControlWidget(QtWidgets.QWidget):
         state = self.xbox.currentStatus()
         boost = 1
 
-        try:
+        if state["connected"]:
             if state["button9"]:
                 boost *= 10
             if state["button10"]:
                 boost *= 10
-        except Exception:
-            print("cannot read button state")
+        else:
+            boost = 1
 
         for master in self.masters:
             if master.axis_id not in state:
                 continue
 
-            value = state[master.axis_id]
+            if state["connected"]:
+                value = state[master.axis_id]
+            else:
+                value = 0
 
             if master.axis_id in ["l_thumb_x", "l_thumb_y", "r_thumb_x", "r_thumb_y"]:
                 value *= 2
