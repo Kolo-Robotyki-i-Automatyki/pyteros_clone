@@ -9,18 +9,6 @@ import time
 
 dead_zone = 0.15
 
-def _create_apt_slave(apt, name, serial):
-    """Creates a pair of a name and a function to move a stage """
-    func = lambda velocity : apt.moveVelocity(serial, velocity)
-    return ("APT %s, s/n: %d" % (name, serial), func)
-
-def _create_anc350_slave(anc350, name, axis):
-    """Creates a pair of a name and a function to move a stage """
-    def f(velocity):
-        anc350.moveVelocity(axis, int(velocity))
-    #func = lambda velocity : anc350.moveVelocity(axis, velocity)
-    return ("Attocube %s axis: %d" % (name, axis), f)
-
 class Master():
     def __init__(self, axis_id, combo, checkInverted, editSpeed):
         self.axis_id = axis_id
@@ -37,6 +25,45 @@ class Master():
         self.comboRecentValid = params[0]
         self.checkInverted.setChecked(params[1])
         self.editSpeed.setText(params[2])
+
+class Slave():
+    def __init__(self, device, description, axis=None, step=False):
+        self.device = device
+        self.description = description
+        self.axis = axis
+        self.step = step
+        self.velocity = 0
+        self.last_direction = 0
+
+    def execute(self):
+        if self.step == False:  #continous movement
+            if self.axis != None:
+                self.device.moveVelocity(self.axis, self.velocity)
+                self.velocity = 0
+            else:
+                self.device.moveVelocity(self.velocity)
+                self.velocity = 0
+        else:                   #step movement
+            if self.velocity < 0:
+                self.direction = -1
+            elif self.velocity > 0:
+                self.direction = 1
+            else:
+                self.direction = 0
+
+            if self.direction != 0 and self.direction != self.last_direction:
+                if self.axis != None:
+                    self.device.moveSteps(self.axis, self.direction)
+                    self.velocity = 0
+                else:
+                    self.device.moveSteps(self.direction)
+                    self.velocity = 0
+            self.last_direction = self.direction
+            self.velocity = 0
+
+    def add_change(self, v):
+        self.velocity += v
+
 
 class JoystickControlWidget(QtWidgets.QWidget):
     """ A widget for interactive control of APT motors or attocube axes using XBoxPad """
@@ -68,7 +95,19 @@ class JoystickControlWidget(QtWidgets.QWidget):
              ("r_thumb_x", "Right stick horizontal"),
              ("r_thumb_y", "Right stick vertical"),
              ('left_trigger', "Left trigger"),
-             ('right_trigger', "Right trigger")]
+             ('right_trigger', "Right trigger"),
+             ("button1", "D-pad up button"),
+             ("button2", "D-pad down button"),
+             ("button4", "D-pad right button"),
+             ("button3", "D-pad left button"),
+             ("button5", "START (arrow right)"),
+             ("button6", "BACK (arrow left)"),
+             ("button7", "Left stick button"),
+             ("button8", "Right stick button"),
+             ("button16" ,"Y button"),
+             ("button13" ,"A button"),
+             ("button14" ,"B button"),
+             ("button15" ,"X button")]
     
 
     def refreshCombos(self):
@@ -76,9 +115,8 @@ class JoystickControlWidget(QtWidgets.QWidget):
             n = master.combo.currentIndex()
             master.combo.clear()
             master.combo.addItem("None")
-            for s in self.slaves:
-                master.combo.addItem(s[0])
-            #master.combo.setCurrentIndex(n)
+            for slave in self.slaves:
+                master.combo.addItem(slave.description)
             master.combo.setCurrentText(master.comboRecentValid)
 
     
@@ -87,12 +125,12 @@ class JoystickControlWidget(QtWidgets.QWidget):
         """ Search through list of devices to find usable slaves to be controlled"""
         self.start(False)
         self.slaves = []
-
         try:
             from ..thorlabs.apt import APT
             for name, apt in {k: v for k, v in self.device_list.items() if isinstance(v, APT)}.items():
                 for serial in apt.devices():
-                    self.slaves.append(_create_apt_slave(apt, name, serial))
+                    description = "Thorlabs APT %s s/n: %d" % (name, serial)
+                    self.slaves.append(Slave(apt, description, serial, step=False))
         except Exception as e:
             print(e)
 
@@ -100,10 +138,12 @@ class JoystickControlWidget(QtWidgets.QWidget):
             from ..attocube.anc350 import ANC350
             for name, anc350 in {k: v for k, v in self.device_list.items() if isinstance(v, ANC350)}.items():
                 for axis in anc350.axes():
-                    self.slaves.append(_create_anc350_slave(anc350, name, axis))
+                    description = "Attocube %s axis: %d" % (name, axis)
+                    self.slaves.append(Slave(anc350, description, axis, step=False))
+                    description_step = "Attocube %s axis: %d single step" % (name, axis)
+                    self.slaves.append(Slave(anc350, description_step, axis, step=True))
         except Exception as e:
             print(e)
-
 
         self.refreshCombos()
 
@@ -116,7 +156,7 @@ class JoystickControlWidget(QtWidgets.QWidget):
             layout.addWidget(QtWidgets.QLabel(label),row,0)
             combo = QtWidgets.QComboBox()
             combo.addItem("None")
-            combo.setMinimumWidth(200)
+            combo.setMinimumWidth(230)
             layout.addWidget(combo, row, 1)
             layout.addWidget(QtWidgets.QLabel("Inv.:"), row, 2)
             checkInverted = QtWidgets.QCheckBox();
@@ -136,9 +176,9 @@ class JoystickControlWidget(QtWidgets.QWidget):
         self.startButton.clicked.connect(self.start)
         self.startButton.clicked.connect(self.saveSettings)
         buttonlayout.addWidget(self.startButton)
-        layout.addLayout(buttonlayout, len(self.masters)+2,0,1,6)
-        layout.setColumnStretch(5,6)
-        layout.setRowStretch(10,6)
+        layout.addLayout(buttonlayout, len(self.masters) + 2, 0, 1, 6)
+        layout.setColumnStretch(5, 6)
+        layout.setRowStretch(len(self.masters) + 1, 16)
 
     def loadSettings(self):
         try:
@@ -172,7 +212,7 @@ class JoystickControlWidget(QtWidgets.QWidget):
                 master.combo.setEnabled(True)
                 slave_nr = master.combo.currentIndex() - 1
                 if slave_nr >= 0:
-                    self.slaves[slave_nr][1](0)
+                    self.slaves[slave_nr].execute() # set zero value
             
     def timeout(self):
         if not self.active:
@@ -180,27 +220,42 @@ class JoystickControlWidget(QtWidgets.QWidget):
         state = self.xbox.currentStatus()
         boost = 1
 
-        try:
+        if state["connected"]:
             if state["button9"]:
                 boost *= 10
             if state["button10"]:
                 boost *= 10
-        except Exception:
-            print("cannot read button state")
+        else:
+            boost = 1
 
         for master in self.masters:
             if master.axis_id not in state:
                 continue
-            value = state[master.axis_id] * 2
-            if abs(value) < dead_zone:
-                value = 0
+
+            if state["connected"]:
+                value = state[master.axis_id]
             else:
-                value = value * (abs(value) - dead_zone) / (1 - dead_zone)
+                value = 0
+
+            if master.axis_id in ["l_thumb_x", "l_thumb_y", "r_thumb_x", "r_thumb_y"]:
+                value *= 2
+                if abs(value) < dead_zone:
+                    value = 0
+                else:
+                    value = value * (abs(value) - dead_zone) / (1 - dead_zone)
+
             if master.checkInverted.isChecked():
                 value = -value
+
             if len(master.editSpeed.text()) != 0:
                 value *= float(master.editSpeed.text()) * boost
+
+
             slave_nr = master.combo.currentIndex() - 1
             if slave_nr >= 0:
-                self.slaves[slave_nr][1](value)
+                self.slaves[slave_nr].add_change(value)
+
+        for slave in self.slaves:
+            slave.execute()
+
         self.timer.start(80)

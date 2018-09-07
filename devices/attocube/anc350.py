@@ -125,14 +125,14 @@ class ANC350Worker(DeviceWorker):
             dir = 1
         else:
             dir = 0
-        self.dll.PositionerFrequency(self.handle, ct.c_int32(axis), ct.c_int32(frequency))
+        self.dll.PositionerFrequency(self.handle, ct.c_int32(axis), ct.c_int32(round(frequency)))
         if 1 - 2 * dir != self.axisDirection[axis]:
             self.dll.PositionerMoveContinuous(self.handle, ct.c_int32(axis), ct.c_int32(dir))
         self.axisDirection[axis] = 1 - 2 * dir
 
     @remote
     def setFrequency(self, axis, frequency):
-        self.dll.PositionerFrequency(self.handle, ct.c_int32(axis), ct.c_int32(frequency))
+        self.dll.PositionerFrequency(self.handle, ct.c_int32(axis), ct.c_int32(round(frequency)))
 
     @remote
     def moveContinous(self, axis, dir):

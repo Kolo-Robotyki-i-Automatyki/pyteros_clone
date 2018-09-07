@@ -36,7 +36,7 @@ class ZMQ_Listener(QtCore.QObject):
 
 
 class WidgetForProcess(QtWidgets.QWidget):
-    def __init__(self, req_port, pub_port, process_class = WorkerForDummyDevice, **kwargs):
+    def __init__(self, req_port=0, pub_port=0, process_class = WorkerForDummyDevice, **kwargs):
         super().__init__()
         
         self.req_port = req_port

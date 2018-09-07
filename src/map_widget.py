@@ -739,7 +739,6 @@ class MapWidget(QtWidgets.QWidget):
         h = (tr.y() - bl.y()) / 3
         x = bl.x() + w
         y = bl.y() + h
-        print(x, y, w, h)
         step = max(10 ** math.floor(math.log10(min(w, h) / 10)), \
                    2 * 10 ** math.floor(math.log10(min(w, h) / 10 / 2)), \
                    5 * 10 ** math.floor(math.log10(min(w, h) / 10 / 5)))
@@ -747,7 +746,6 @@ class MapWidget(QtWidgets.QWidget):
         y = step * math.floor(y / step)
         w = step * math.floor(w / step)
         h = step * math.floor(h / step)
-        print(x, y, w, h, step)
 
         map_area = MapAreaItem(self, x, y, w, h, step, step)
 
