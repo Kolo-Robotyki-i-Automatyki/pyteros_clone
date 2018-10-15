@@ -1,0 +1,22 @@
+[device1]
+name=Thorlabs APT
+class=thorlabs.apt.APTWorker
+req_port=7008
+pub_port=7009
+
+
+[device2]
+name=Attocube ANC350
+class=attocube.anc350.ANC350Worker
+
+[device3]
+name=XBox
+class=misc.xbox.XBoxWorker
+req_port=7004
+pub_port=7005
+
+[device4]
+name=Generic spectrometer
+class=spectro.spectrometer.SpectrometerWorker
+req_port=9750
+pub_port=9751

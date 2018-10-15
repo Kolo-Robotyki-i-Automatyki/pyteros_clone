@@ -1,0 +1,12 @@
+[apt]
+class=thorlabs.apt.APT
+
+[anc350]
+class=attocube.anc350.ANC350
+
+[xbox]
+class=misc.xbox.XBoxPad
+
+[trivista]
+class=spectrometer.trivista
+hostname=192.168.1.1
