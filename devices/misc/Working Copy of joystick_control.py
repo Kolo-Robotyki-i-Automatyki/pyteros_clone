@@ -1,2 +1,0 @@
-
-{'buttons': <class 'ctypes.c_ushort'>, 'left_trigger': <class 'ctypes.c_ubyte'>, 'right_trigger': <class 'ctypes.c_ubyte'>, 'l_thumb_x': <class 'ctypes.c_short'>, 'l_thumb_y': <class 'ctypes.c_short'>, 'r_thumb_x': <class 'ctypes.c_short'>, 'r_thumb_y': <class 'ctypes.c_short'>}
