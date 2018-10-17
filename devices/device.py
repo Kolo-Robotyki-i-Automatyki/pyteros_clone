@@ -58,9 +58,9 @@ import sys,traceback
 
 
 
-def load_devices(use_gui=False, parent=None):
+def load_devices(use_gui=False, parent=None, file='devices.ini'):
     config = configparser.ConfigParser()
-    config.read('devices.ini')
+    config.read(file)
     sections = [config[name] for name in config.sections()]
     for section in sections:
         try:
@@ -95,7 +95,7 @@ def load_devices(use_gui=False, parent=None):
                 changed = True
             section['enabled'] = str(section.enabled).lower()
         if changed:
-            with open('devices.ini', 'w') as configfile:
+            with open(file, 'w') as configfile:
                 config.write(configfile)
     
     for section in config.sections():
@@ -117,9 +117,9 @@ def load_devices(use_gui=False, parent=None):
             traceback.print_exc(file=sys.stdout)
 
 
-def load_workers():
+def load_workers(file='local_devices.ini'):
     config = configparser.ConfigParser()
-    config.read('local_devices.ini')
+    config.read(file)
     workers = []
     for section in config.sections():
         try:

@@ -1,11 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Sat May 26 09:54:02 2018
 
-This code was originally written by Tomasz Kazimierczuk for LUMS - Laboratory
-of Ultrafast MagnetoSpectroscopy at Faculty of Physics, University of Warsaw
-
+@author: tkaz
 """
 
 from PyQt5 import Qt,QtCore,QtGui,QtWidgets
@@ -36,7 +33,9 @@ class ZMQ_Listener(QtCore.QObject):
         print("stopped")
 
 
-class Process(QtCore.QObject):
+
+
+class WidgetForProcess(QtWidgets.QWidget):
     def __init__(self, req_port=0, pub_port=0, process_class = WorkerForDummyDevice, **kwargs):
         super().__init__()
         
@@ -52,37 +51,38 @@ class Process(QtCore.QObject):
         
         self.process = None
         
-        #layout = QtWidgets.QVBoxLayout()
-        #layout2 = QtWidgets.QHBoxLayout()
-        #label1 = QtWidgets.QLabel("REQ port:")
-        #edit1 = QtWidgets.QLineEdit(str(self.req_port))
-        #edit1.setEnabled(False)
-        #layout2.addWidget(label1)
-        #layout2.addWidget(edit1)
-        #layout2.addSpacing(10)
-        #label2 = QtWidgets.QLabel("PUB port:")
-        #edit2 = QtWidgets.QLineEdit(str(self.pub_port))
-        #edit2.setEnabled(False)
-        #layout2.addWidget(label2)
-        #layout2.addWidget(edit2)
-        #layout2.addSpacing(10)
-        #self.startbutton = QtWidgets.QPushButton("Start process")
-        #self.startbutton.setCheckable(True)
-        #self.startbutton.clicked.connect(self.startProcess)
-        #layout2.addWidget(self.startbutton)
-        #layout2.addStretch(5)
-        #layout.addLayout(layout2)
-        #textedit = QtWidgets.QTextEdit()
-        #textedit.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
-        #layout.addWidget(textedit)
-        #self.setLayout(layout)
-          
+        layout = QtWidgets.QVBoxLayout()
+        layout2 = QtWidgets.QHBoxLayout()
+        label1 = QtWidgets.QLabel("REQ port:")
+        edit1 = QtWidgets.QLineEdit(str(self.req_port))
+        edit1.setEnabled(False)
+        layout2.addWidget(label1)
+        layout2.addWidget(edit1)
+        layout2.addSpacing(10)
+        label2 = QtWidgets.QLabel("PUB port:")
+        edit2 = QtWidgets.QLineEdit(str(self.pub_port))
+        edit2.setEnabled(False)
+        layout2.addWidget(label2)
+        layout2.addWidget(edit2)
+        layout2.addSpacing(10)
+        self.startbutton = QtWidgets.QPushButton("Start process")
+        self.startbutton.setCheckable(True)
+        self.startbutton.clicked.connect(self.startProcess)
+        layout2.addWidget(self.startbutton)
+        layout2.addStretch(5)
+        layout.addLayout(layout2)
+        textedit = QtWidgets.QTextEdit()
+        textedit.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        layout.addWidget(textedit)
+        self.setLayout(layout)  
         
         def appendErr(text):
-            print(text)
+            textedit.setTextColor(QtGui.QColor(255,0,0))
+            textedit.append(text)
         
         def appendInfo(text):
-            print(text)
+            textedit.setTextColor(QtGui.QColor(0,0,64))
+            textedit.append(text)
             
         self.thread = QtCore.QThread(self)
         self.listener = ZMQ_Listener(self.sub_socket)
@@ -91,12 +91,12 @@ class Process(QtCore.QObject):
         self.listener.msg_info.connect(appendInfo)
         self.listener.msg_err.connect(appendErr)
         self.thread.start()
-        #layout.addWidget(textedit)
-
+        layout.addWidget(textedit)
+        
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.checkOnProcess)
-        self.timer.start(2000)
-
+        self.timer.start(5000)
+        
     def __del__(self):
         self.listener.continue_running = False
         if self.process:
@@ -108,78 +108,74 @@ class Process(QtCore.QObject):
         return self.process_class(req_port = self.req_port, pub_port = self.pub_port, **self.kwargs)
 
     def startProcess(self, start = True):
-        self.process = self.createProcess()
-        self.process.daemon = True
-        self.process.start()
-        '''    #self.startbutton.setChecked(True)
+        if start:
+            self.process = self.createProcess()
+            self.process.daemon = True
+            self.process.start()
+            self.startbutton.setChecked(True)
         else:
             if self.process:
                 self.process.terminate()
                 self.process.join()
-                self.process = None'''
+                self.process = None
 
 
     def checkOnProcess(self):
         if self.process == None:
-            self.startProcess()
-        '''
-        if self.process == None:
-            self.startProcess()
+            self.startbutton.setChecked(False)
             return
         if self.process.is_alive():
-            return
-            #self.startbutton.setChecked(True)
+            self.startbutton.setChecked(True)
         elif self.process.exitcode is None: # Not finished and not running
             # Do your error handling and restarting here assigning the new process to processes[n]
-            #self.startbutton.setChecked(False)
+            self.startbutton.setChecked(False)
             self.process = None
         elif self.process.exitcode < 0:
-            #self.startbutton.setChecked(False)
+            self.startbutton.setChecked(False)
             self.process = None
         else:
             print ('finished')
             self.process.join()
             self.process = None
-        '''
 
 
 
-class MainWindow(QtCore.QObject):
+
+class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent = None):
         super().__init__(parent)
-        #self.createCentralWidget()
-        #self.setupIcons()
+        self.createCentralWidget()
+        self.setupIcons()
 
-        #quitAct = QtWidgets.QAction("&Quit", self);
-        #quitAct.setShortcuts(QtGui.QKeySequence.Quit)
-        #quitAct.setStatusTip("Quit the application")
-        #quitAct.triggered.connect(self.close)
-        #fileMenu = self.menuBar().addMenu("&File")
-        #fileMenu.addAction(quitAct)
+        quitAct = QtWidgets.QAction("&Quit", self);
+        quitAct.setShortcuts(QtGui.QKeySequence.Quit)
+        quitAct.setStatusTip("Quit the application")
+        quitAct.triggered.connect(self.close)
+        fileMenu = self.menuBar().addMenu("&File")
+        fileMenu.addAction(quitAct)
         self.createTabs()
 
-    #def createCentralWidget(self):
-    #    self.toolBox = QtWidgets.QToolBox()
-    #    self.setCentralWidget(self.toolBox)
-    #
-    #def setupIcons(self):
-    #    self.trayIconMenu = QtWidgets.QMenu(self);
-    ###    showAction = self.trayIconMenu.addAction("Show main window")
-    #    showAction.triggered.connect(self.show)
-    #
-    #    icon = QtGui.QIcon("img/icon_server.svg")
-    #    self.setWindowIcon(icon)
-    #    self.setWindowTitle("pyLUMS - Device server")
+    def createCentralWidget(self):
+        self.toolBox = QtWidgets.QToolBox()
+        self.setCentralWidget(self.toolBox)
+
+    def setupIcons(self):
+        self.trayIconMenu = QtWidgets.QMenu(self);
+        showAction = self.trayIconMenu.addAction("Show main window")
+        showAction.triggered.connect(self.show)
+
+        icon = QtGui.QIcon("img/icon_server.svg")
+        self.setWindowIcon(icon)
+        self.setWindowTitle("pyLUMS - Device server")
 
 
     def createTabs(self):
         workers_desc = devices.load_workers()
-        self.processes = []
+        
         for name,cls,kwargs in workers_desc:
             try:
-                print('creating process')
-                process = Process(process_class=cls, **kwargs)
-                self.processes.append(process)
+                widget = WidgetForProcess(process_class=cls, **kwargs)
+                self.toolBox.addItem(widget, name)
             except Exception as e:
                 #print(str(e))
                 traceback.print_exc(file=sys.stdout)        
@@ -188,12 +184,12 @@ class MainWindow(QtCore.QObject):
 if __name__ == '__main__':
     import sys
     def run_app():
-        app = QtCore.QCoreApplication(sys.argv)
-        #icon = QtGui.QIcon("img/icon_server.svg")
-        #app.setWindowIcon(icon)
+        app = QtWidgets.QApplication(sys.argv)
+        icon = QtGui.QIcon("img/icon_server.svg")
+        app.setWindowIcon(icon)
         window = MainWindow()
         
-        #window.show()
+        window.show()
         app.exec_()
         
         
