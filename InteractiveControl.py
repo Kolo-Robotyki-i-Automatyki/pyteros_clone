@@ -2,7 +2,10 @@
 """
 Created on Sat May 26 09:54:02 2018
 
-@author: tkaz
+This code was originally written by Tomasz Kazimierczuk for LUMS - Laboratory
+of Ultrafast MagnetoSpectroscopy at Faculty of Physics, University of Warsaw
+
+
 """
 
 from PyQt5 import Qt,QtCore,QtGui,QtWidgets

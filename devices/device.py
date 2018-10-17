@@ -1,5 +1,9 @@
-# -*- coding: utf-8 -*-
+'''# -*- coding: utf-8 -*-
 
+This code was originally written by Tomasz Kazimierczuk for LUMS - Laboratory
+of Ultrafast MagnetoSpectroscopy at Faculty of Physics, University of Warsaw
+
+'''
 from enum import Enum
 from numpy import nan
 import configparser
