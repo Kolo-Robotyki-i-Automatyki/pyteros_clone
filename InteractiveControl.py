@@ -12,6 +12,9 @@ from PyQt5 import Qt,QtCore,QtGui,QtWidgets
 import time
 import devices
 
+class NoRequiredDevicesError(Exception):
+    """Error raised if no devices required for given feature is found."""
+    pass
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None):
@@ -98,15 +101,12 @@ if __name__ == '__main__':
         window.kernel_client.execute('print(list(devices.active_devices))')
         window.kernel_client.execute('import time')
         window.kernel_client.execute('import numpy as np')
-        window.kernel_client.execute('from src.measurement_file import MeasurementFile')
         
         for _,device in devices.active_devices.items():
             try:
                 device.createDock(window, window.controlMenu)
             except Exception as e:
                 traceback.print_exc(file=sys.stdout)
-
-        from src.measurement_tab import NoRequiredDevicesError
 
         try:
             from devices.misc import joystick_control

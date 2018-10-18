@@ -8,6 +8,11 @@ from ..misc.xbox import XBoxPad
 import time
 from collections import deque
 import itertools
+
+class NoRequiredDevicesError(Exception):
+    """Error raised if no devices required for given feature is found."""
+    pass
+
 epsilon = 0.00000001
 dead_zone = 0.08
 class Master():
@@ -94,7 +99,6 @@ class JoystickControlWidget(QtWidgets.QWidget):
         except Exception as e:
             print(e)
         if self.xbox == None:
-            from src.measurement_tab import NoRequiredDevicesError
             raise NoRequiredDevicesError("No XBoxPad found")
 
         self.timer = QtCore.QTimer()
