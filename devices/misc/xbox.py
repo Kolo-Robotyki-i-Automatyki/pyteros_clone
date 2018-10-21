@@ -41,9 +41,15 @@ class XBoxWorker(DeviceWorker):
 
     def init_device(self):
         self.gamepad = devices.gamepads[self.device_number]
-        self.gamepad.set_vibration(1, 1)
-        sleep(0.5)
-        self.gamepad.set_vibration(0, 0)
+        try:
+            self.gamepad.set_vibration(1, 1)
+            sleep(0.5)
+            self.gamepad.set_vibration(0, 0)
+        except Exception:
+            pass
+
+
+
         print("Pad no. " + str(self.device_number + 1) + " is now connected.")
         self.state_lock = threading.Lock()
         self.status_thread = threading.Thread(target=self._state_loop)
