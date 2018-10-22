@@ -1,4 +1,4 @@
 #!/bin/bash
 sleep 15
-python3 DeviceServer.py &
+python3 DeviceServerHeadless.py &
 
