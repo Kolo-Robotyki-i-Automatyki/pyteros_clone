@@ -94,6 +94,8 @@ class IKScripterWidget(QtWidgets.QWidget):
         self.files = []
         self.indexes = {}
         for file in file_list[2:]:
+            if file[-4:] != '.txt':
+                continue
             name = file[0:-4]
             self.indexes[name] = len(self.files)
             self.files.append(name)
