@@ -55,7 +55,7 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
             edit = QtWidgets.QLineEdit(str(self.sides[s]))
             edit.setValidator(QtGui.QDoubleValidator())
             layout.addWidget(edit, 1, 2 * col - 1, 1, 2)
-            edit.setFixedWidth(120)
+            edit.setFixedWidth(160)
             edit.editingFinished.connect(self.updatePixmap)
             edit.editingFinished.connect(self.saveSettings)
             self.edits[s] = edit

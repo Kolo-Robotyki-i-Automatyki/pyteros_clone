@@ -1,5 +1,4 @@
 
-from src.map_widget.map_area_item import MapAreaItem, epsilon
 from src.map_widget.sample_image_item import SampleImageItem
 from devices.can import Can
 
@@ -149,54 +148,15 @@ class MapWidget(QtWidgets.QWidget):
 
         layout = QtWidgets.QVBoxLayout()  # main vertical layout
         self.setLayout(layout)
+
         hlayout1 = QtWidgets.QHBoxLayout()  # horizontal layout for graphics view and mapping
+
         layout.addLayout(hlayout1)
         self.viewwidget = ZoomableGraphicsView(self)
         self.setupScene()
-
-        self.map_area_scroll = QtWidgets.QScrollArea()
-        self.map_area_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        self.map_area_scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
-        self.map_area_scroll.setWidgetResizable(True)
-        map_area_scroll_frame = QtWidgets.QFrame(self.map_area_scroll)
-        self.map_area_scroll.setWidget(map_area_scroll_frame)
-        self.map_area_scroll.setFixedWidth(175)
-        self.map_area_scroll.setVisible(False)
-        map_area_buttons_layout = QtWidgets.QHBoxLayout()
-
-        self.map_area_layout = QtWidgets.QVBoxLayout()
-        map_area_scroll_frame.setLayout(self.map_area_layout)
-
-        self.label_total_map_count = QtWidgets.QLabel()
-        self.map_area_layout.addWidget(self.label_total_map_count)
-
-        self.check_box_snap = QtWidgets.QCheckBox("Snap to grid")
-        self.check_box_snap.setChecked(True)
-        self.map_area_layout.addWidget(self.check_box_snap)
-        self.map_area_layout.addLayout(map_area_buttons_layout)
-        self.map_area_layout.addStretch(10)
-
-        self.map_area_items = []
-        self.button_add_map_area = QtWidgets.QPushButton("Add")
-        self.button_add_map_area.setFixedWidth(65)
-        map_area_buttons_layout.addWidget(self.button_add_map_area)
-        self.button_add_map_area.clicked.connect(self.add_map_area)
-        self.button_delete_map_area = QtWidgets.QPushButton("Delete")
-        self.button_delete_map_area.setFixedWidth(65)
-        map_area_buttons_layout.addWidget(self.button_delete_map_area)
-        self.button_delete_map_area.setEnabled(False)
-        self.button_delete_map_area.clicked.connect(self.delete_map_area)
-
-        hlayout1.addWidget(self.map_area_scroll)
-
         hlayout1.addWidget(self.viewwidget)
 
         hlayout2 = QtWidgets.QHBoxLayout()
-
-        check_box_enable_map = QtWidgets.QCheckBox("Show mapping panel")
-        check_box_enable_map.stateChanged.connect(self.map_area_scroll.setVisible)
-        hlayout2.addWidget(check_box_enable_map)
-        hlayout2.addStretch(10)
 
         hlayout2.addWidget(QtWidgets.QLabel("x:"))
         self.xwidget = QtWidgets.QLineEdit()
@@ -241,73 +201,14 @@ class MapWidget(QtWidgets.QWidget):
         hlayout4.addStretch(1)
         layout.addLayout(hlayout4)
 
-        self.can = Can(req_port=10200, pub_port=10201, host="10.1.1.200")
+        try:
+            from devices.can import Can
+            for name, can in {k: v for k, v in self.device_list.items() if isinstance(v, Can)}.items():
+                self.can = can
+        except Exception as e:
+            print(e)
+
         self.slopepoints = []
-
-    def delete_duplicated_points(self, points):
-        order_function = lambda p: p[0] * 100 * numpy.pi + p[1]
-        points.sort(key=order_function)  # low probability of equal points
-        if len(points) == 0:
-            unique = []
-        else:
-            unique = [points[0]]
-            for i in range(1, len(points)):
-                duplicate = False
-                j = -1
-                while j >= - len(unique) and order_function(unique[j]) > order_function(points[i]) - epsilon:
-                    if math.sqrt((unique[j][0] - points[i][0]) ** 2 + (unique[j][1] - points[i][1]) ** 2) < epsilon:
-                        duplicate = True
-                        break
-                    j -= 1
-                if not duplicate:
-                    unique.append(points[i])
-        return unique
-
-    def update_label_total_map_count(self):
-        points = []
-        for map_area in self.map_area_items:
-            new_points = map_area.get_positions()
-            if len(new_points) > 30000:
-                self.label_total_map_count.setText(">30000 points total.")
-                return
-            points += new_points
-        unique = self.delete_duplicated_points(points)
-        self.label_total_map_count.setText(str(len(unique)) + " points total.")
-
-    def add_map_area(self):
-        if len(self.map_area_items) == 0:
-            self.button_delete_map_area.setEnabled(True)
-
-        tr = self.viewwidget.mapToScene(QtCore.QPoint(self.viewwidget.width(), 0))
-        bl = self.viewwidget.mapToScene(QtCore.QPoint(0, self.viewwidget.height()))
-        w = (tr.x() - bl.x()) / 3
-        h = (tr.y() - bl.y()) / 3
-        x = bl.x() + w
-        y = bl.y() + h
-        step = max(10 ** math.floor(math.log10(min(w, h) / 10)), \
-                   2 * 10 ** math.floor(math.log10(min(w, h) / 10 / 2)), \
-                   5 * 10 ** math.floor(math.log10(min(w, h) / 10 / 5)))
-        x = step * math.floor(x / step)
-        y = step * math.floor(y / step)
-        w = step * math.floor(w / step)
-        h = step * math.floor(h / step)
-
-        map_area = MapAreaItem(self, x, y, w, h, step, step)
-
-        self.map_area_layout.removeItem(self.map_area_layout.itemAt( \
-            self.map_area_layout.count() - 1))
-        self.map_area_layout.insertWidget(-3, map_area.widget)
-        self.map_area_layout.addStretch(10)
-        self.map_area_items.append(map_area)
-        self.update_label_total_map_count()
-
-    def delete_map_area(self):
-        if len(self.map_area_items) == 1:
-            self.button_delete_map_area.setEnabled(False)
-        self.scene.removeItem(self.map_area_items[-1])
-        self.map_area_items[-1].widget.setVisible(False)
-        self.map_area_layout.removeWidget(self.map_area_items[-1].widget)
-        self.map_area_items.pop(-1)
 
     def loadSettings(self):
         try:

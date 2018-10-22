@@ -2,19 +2,23 @@
 """
 """
 import os
-from PyQt5 import QtCore,QtWidgets,QtGui
+from PyQt5 import QtCore, QtWidgets, QtGui
 import jsonpickle
 from ..misc.xbox import XBoxPad
 import time
 from collections import deque
 import itertools
 
+
 class NoRequiredDevicesError(Exception):
     """Error raised if no devices required for given feature is found."""
     pass
 
+
 epsilon = 0.00000001
 dead_zone = 0.08
+
+
 class Master():
     def __init__(self, axis_id, combo, checkInverted, editSpeedMax, editSpeedMin, editSpeedSmooth):
         self.axis_id = axis_id
@@ -26,9 +30,11 @@ class Master():
         self.editSpeedSmooth = editSpeedSmooth
         self.lastvals = deque([0 for i in range(101)])
 
-    def dump(self): #serializes parameters
+    def dump(self):  # serializes parameters
         self.comboRecentValid = self.combo.currentText()
-        return (self.comboRecentValid, self.checkInverted.isChecked(), self.editSpeedMax.text(), self.editSpeedMin.text(), self.editSpeedSmooth.text())
+        return (
+        self.comboRecentValid, self.checkInverted.isChecked(), self.editSpeedMax.text(), self.editSpeedMin.text(),
+        self.editSpeedSmooth.text())
 
     def restore(self, params):
         self.comboRecentValid = params[0]
@@ -37,8 +43,9 @@ class Master():
         self.editSpeedMin.setText(params[3])
         self.editSpeedSmooth.setText(params[4])
 
+
 class Slave():
-    def __init__(self, device, description, axis=None, step = False, method="power"):
+    def __init__(self, device, description, axis=None, step=False, method="power"):
         self.device = device
         self.description = description
         self.axis = axis
@@ -50,18 +57,19 @@ class Slave():
 
     def execute(self):
         try:
-            if self.velocity == self.last_velocity and abs(self.velocity) < 0.000001:# and not(self.axis == 190 or self.axis == 191 or self.axis == 201 or self.axis == 200):
+            if self.velocity == self.last_velocity and abs(
+                    self.velocity) < 0.000001:  # and not(self.axis == 190 or self.axis == 191 or self.axis == 201 or self.axis == 200):
                 self.velocity = 0
                 return
             self.last_velocity = self.velocity
-            if self.step == False:  #continous movement
+            if self.step == False:  # continous movement
                 if self.axis != None:
                     self.method(self.axis, self.velocity)
                     self.velocity = 0
                 else:
                     self.method(self.velocity)
                     self.velocity = 0
-            else:                   #step movement
+            else:  # step movement
                 if self.velocity < 0:
                     self.direction = -1
                 elif self.velocity > 0:
@@ -87,7 +95,7 @@ class Slave():
 
 class JoystickControlWidget(QtWidgets.QWidget):
     """ A widget for interactive control of APT motors or attocube axes using XBoxPad """
-    
+
     def __init__(self, slave_devices=[], parent=None):
         super().__init__(parent)
         self.device_list = slave_devices
@@ -106,46 +114,45 @@ class JoystickControlWidget(QtWidgets.QWidget):
         self.timer.timeout.connect(self.timeout)
         self.active = False
 
-        self.axes =  [("l_thumb_x", "Left stick horizontal"),
-             ("l_thumb_y", "Left stick vertical"),
-             ("r_thumb_x", "Right stick horizontal"),
-             ("r_thumb_y", "Right stick vertical"),
-             #('left_trigger', "Left trigger"),
-             #('right_trigger', "Right trigger"),
-             ("button4", "D-pad horizontal"),
-             ("button1", "D-pad vertical"),
-             ("button5", "START (arrow right)"),
-             ("button6", "BACK (arrow left)"),
-             #("button7", "Left stick button"),
-             #("button8", "Right stick button"),
-             #("button9", "Left trigger button"),
-             ("button10", "Right trigger button"),
-             ("button16" ,"Y button"),
-             ("button13" ,"A button"),
-             ("button14" ,"B button"),
-             ("button15" ,"X button"),
-             ("alt_l_thumb_x", "Alt Left stick horizontal"),
-             ("alt_l_thumb_y", "Alt Left stick vertical"),
-             ("alt_r_thumb_x", "Alt Right stick horizontal"),
-             ("alt_r_thumb_y", "Alt Right stick vertical"),
-             # ('alt_left_trigger', "Alt Left trigger"),
-             # ('alt_right_trigger', "Alt Right trigger"),
-             ("alt_button4", "Alt D-pad horizontal"),
-             ("alt_button1", "Alt D-pad vertical"),
-             ("alt_button5", "Alt START (arrow right)"),
-             ("alt_button6", "Alt BACK (arrow left)"),
-             #("alt_button7", "Alt Left stick button"),
-             #("alt_button8", "Alt Right stick button"),
-             # ("alt_button9", "Left trigger button"),
-             ("alt_button10", "Alt Right trigger button"),
-             ("alt_button16", "Alt Y button"),
-             ("alt_button13", "Alt A button"),
-             ("alt_button14", "Alt B button"),
-             ("alt_button15", "Alt X button")]
+        self.axes = [("l_thumb_x", "Left stick horizontal"),
+                     ("l_thumb_y", "Left stick vertical"),
+                     ("r_thumb_x", "Right stick horizontal"),
+                     ("r_thumb_y", "Right stick vertical"),
+                     # ('left_trigger', "Left trigger"),
+                     # ('right_trigger', "Right trigger"),
+                     ("button4", "D-pad horizontal"),
+                     ("button1", "D-pad vertical"),
+                     ("button5", "START (arrow right)"),
+                     ("button6", "BACK (arrow left)"),
+                     # ("button7", "Left stick button"),
+                     # ("button8", "Right stick button"),
+                     # ("button9", "Left trigger button"),
+                     ("button10", "Right trigger button"),
+                     ("button16", "Y button"),
+                     ("button13", "A button"),
+                     ("button14", "B button"),
+                     ("button15", "X button"),
+                     ("alt_l_thumb_x", "Alt Left stick horizontal"),
+                     ("alt_l_thumb_y", "Alt Left stick vertical"),
+                     ("alt_r_thumb_x", "Alt Right stick horizontal"),
+                     ("alt_r_thumb_y", "Alt Right stick vertical"),
+                     # ('alt_left_trigger', "Alt Left trigger"),
+                     # ('alt_right_trigger', "Alt Right trigger"),
+                     ("alt_button4", "Alt D-pad horizontal"),
+                     ("alt_button1", "Alt D-pad vertical"),
+                     ("alt_button5", "Alt START (arrow right)"),
+                     ("alt_button6", "Alt BACK (arrow left)"),
+                     # ("alt_button7", "Alt Left stick button"),
+                     # ("alt_button8", "Alt Right stick button"),
+                     # ("alt_button9", "Left trigger button"),
+                     ("alt_button10", "Alt Right trigger button"),
+                     ("alt_button16", "Alt Y button"),
+                     ("alt_button13", "Alt A button"),
+                     ("alt_button14", "Alt B button"),
+                     ("alt_button15", "Alt X button")]
 
         self._createWidgets()
         self.loadSettings()
-
 
     def refreshCombos(self):
         for master in self.masters:
@@ -155,8 +162,6 @@ class JoystickControlWidget(QtWidgets.QWidget):
             for slave in self.slaves:
                 master.combo.addItem(slave.description)
             master.combo.setCurrentText(master.comboRecentValid)
-
-    
 
     def findSlaves(self):
         """ Search through list of devices to find usable slaves to be controlled"""
@@ -176,17 +181,6 @@ class JoystickControlWidget(QtWidgets.QWidget):
         except Exception as e:
             print(e)
 
-        try:
-            from ..attocube.anc350 import ANC350
-            for name, anc350 in {k: v for k, v in self.device_list.items() if isinstance(v, ANC350)}.items():
-                for axis in anc350.axes():
-                    description = "Attocube %s axis: %d" % (name, axis)
-                    self.slaves.append(Slave(anc350, description, axis, step=False, method="moveVelocity"))
-                    #description_step = "Attocube %s axis: %d single step" % (name, axis)
-                    #self.slaves.append(Slave(anc350, description_step, axis, step=True))
-        except Exception as e:
-            print(e)
-
         self.refreshCombos()
 
     def _createWidgets(self):
@@ -194,9 +188,9 @@ class JoystickControlWidget(QtWidgets.QWidget):
         layout.setSpacing(4)
         self.setLayout(layout)
         self.masters = []
-    
+
         for row, (axis_id, label) in enumerate(self.axes):
-            layout.addWidget(QtWidgets.QLabel(label),row,0)
+            layout.addWidget(QtWidgets.QLabel(label), row, 0)
             combo = QtWidgets.QComboBox()
             combo.addItem("None")
             combo.setMinimumWidth(230)
@@ -219,12 +213,13 @@ class JoystickControlWidget(QtWidgets.QWidget):
             editSpeedSmooth.setFixedWidth(60)
             editSpeedSmooth.setValidator(QtGui.QDoubleValidator())
             layout.addWidget(editSpeedSmooth, row, 9)
-            self.masters.append( Master(axis_id, combo, checkInverted, editSpeedMax, editSpeedMin, editSpeedSmooth) )
+            layout.setColumnStretch(10, 10)
+            self.masters.append(Master(axis_id, combo, checkInverted, editSpeedMax, editSpeedMin, editSpeedSmooth))
 
         buttonlayout = QtWidgets.QHBoxLayout()
         self.refreshButton = QtWidgets.QPushButton("Refresh")
         self.refreshButton.clicked.connect(self.findSlaves)
-        buttonlayout.addWidget(self.refreshButton)            
+        buttonlayout.addWidget(self.refreshButton)
         self.startButton = QtWidgets.QPushButton("Start control")
         self.startButton.setCheckable(True)
         self.startButton.clicked.connect(self.start)
@@ -235,14 +230,15 @@ class JoystickControlWidget(QtWidgets.QWidget):
         layout.setRowStretch(len(self.masters) + 1, 16)
 
     def loadSettings(self):
-        try:
-            with open("config" + os.sep + "joystick_control.cfg", "r") as file:
-                list = jsonpickle.decode(file.read())
-                for i in range(len(list)):
-                    if i < len(self.masters):
-                        self.masters[i].restore(list[i])
-        except Exception as e:
-            print(e)
+        #try:
+        with open("config" + os.sep + "joystick_control.cfg", "r") as file:
+            list = jsonpickle.decode(file.read())
+            for i in range(len(list)):
+                if i < len(self.masters):
+                    self.masters[i].restore(list[i])
+        #except Exception as e:
+        #    # print(e)
+        #    pass
 
     def saveSettings(self):
         try:
@@ -263,8 +259,8 @@ class JoystickControlWidget(QtWidgets.QWidget):
             for master in self.masters:
                 slave_nr = master.combo.currentIndex() - 1
                 if slave_nr >= 0:
-                    self.slaves[slave_nr].execute() # set zero value
-            
+                    self.slaves[slave_nr].execute()  # set zero value
+
     def timeout(self):
         if not self.active:
             return
@@ -288,14 +284,14 @@ class JoystickControlWidget(QtWidgets.QWidget):
                 state[axis] = state_raw[axis]
 
         for master in self.masters:
-            #print(master.axis_id)
+            # print(master.axis_id)
             if master.axis_id not in state:
                 continue
             if state["connected"]:
                 value = state[master.axis_id]
             else:
                 value = 0
-            #print(value)
+            # print(value)
             if master.axis_id in ["l_thumb_x", "l_thumb_y", "r_thumb_x", "r_thumb_y",
                                   "alt_l_thumb_x", "alt_l_thumb_y", "alt_r_thumb_x", "alt_r_thumb_y"]:
                 if abs(value) < dead_zone:
@@ -336,7 +332,6 @@ class JoystickControlWidget(QtWidgets.QWidget):
             master.lastvals.rotate(1)
             master.lastvals[0] = value
             value = sum(list(itertools.islice(master.lastvals, 0, smooth + 1))) / (smooth + 1)
-
 
             slave_nr = master.combo.currentIndex() - 1
             if slave_nr >= 0:
