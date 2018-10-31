@@ -144,6 +144,13 @@ if __name__ == '__main__':
         except Exception as e:
             traceback.print_exc(file=sys.stdout)
 
+        try:
+            from src.camera_viewer import camera_viewer
+            camera_widget = camera_viewer.CameraViewer()
+            window.addPage(camera_widget, "Video streaming")
+        except Exception as e:
+            traceback.print_exc(file=sys.stdout)
+
         window.show()
         app.exec_()
                 
