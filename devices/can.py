@@ -58,6 +58,7 @@ class CanWorker(DeviceWorker):
         self.is_ik = False
         self.ikpositions = [0.85 * PI, 0.65 *PI, PI, PI]
         self.encoders = {190:0, 191:0, 200:0, 201:0}
+        self.index_pulses = {190:500.0, 191:500.0, 200:500.0, 201:500.0}
         self.ik_position = [150 * deg, 90 * deg, 240 * deg, 180 * deg]
         self.ik_speed = [0, 0, 0, 0]
         self.ik_update_timestamp = clock()
@@ -111,6 +112,11 @@ class CanWorker(DeviceWorker):
         self.send(201, [18, 100])
         self.send(200, [18, 100])
 
+        self.send(190, [38, 1800 >> 8, 1800 & 0xff])
+        self.send(191, [38, 1800 >> 8, 1800 & 0xff])
+        self.send(201, [38, 1800 >> 8, 1800 & 0xff])
+        self.send(200, [38, 1800 >> 8, 1800 & 0xff])
+
         print("Can initialized")
 
 
@@ -130,6 +136,9 @@ class CanWorker(DeviceWorker):
         #self.compass_roll = list[2] * 3.14159 / 180
         #print(list)
 
+        with self.data_lock:
+            print([self.index_pulses, self.encoders])
+
         self.compass_terrain_direction = (self.compass_heading - math.atan2(self.compass_roll, self.compass_pitch)) % (
                     2 * PI)
         self.compass_terrain_slope = math.asin((math.sin(self.compass_pitch) ** 2 + math.cos(
@@ -142,7 +151,8 @@ class CanWorker(DeviceWorker):
             d["terrain_direction"] = self.compass_terrain_direction
             d["terrain_slope"] = self.compass_terrain_slope
             d["voltage"] = sum(self.battery_v) / 40.0
-            print('d["voltage"] ' + str(d["voltage"]))
+            d["encoders"] = self.encoders
+            d["index_pulses"] = self.index_pulses
 
             s = sum(self.battery_v)
             if s < 4 * 180:
@@ -153,7 +163,6 @@ class CanWorker(DeviceWorker):
                 i = s - 180 * 4
 
             d['battery'] = lipo_characteristics[i]
-            print('d["battery"] ' + str(d["battery"]))
         return d
 
         # This method is override of can.Listener method, so message is in sense of packet.
@@ -201,7 +210,12 @@ class CanWorker(DeviceWorker):
                     self.battery_v[motor] = int.from_bytes(msg.data[5:7], byteorder='big', signed=True)
             elif msg.data[0] == 28:
                 motor = msg.arbitration_id - 1024
-                self.encoders[motor] = (msg.data[1] * 256 + msg.data[2]) / 10
+                with self.data_lock:
+                    try:
+                        self.index_pulses[motor] = (msg.data[3] * 256 + msg.data[4]) / 10
+                    except Exception as e:
+                        pass
+                    self.encoders[motor] = (msg.data[1] * 256 + msg.data[2]) / 10
             else:
                 with self.msg_lock:
                     self.messages.append(msg)
@@ -264,8 +278,6 @@ class CanWorker(DeviceWorker):
                 self.drive(0, 0.25)
                 sleep(0.05)
 
-
-
     @remote
     def set_auto(self, waypoint = 1):
         with self.auto_lock:
@@ -326,6 +338,8 @@ class CanWorker(DeviceWorker):
                             elif command == "r":
                                 args = (float(line.pop(0)), float(line.pop(0)), float(line.pop(0)), float(line.pop(0)) * deg)
                                 functions["__ik__"] = lambda args=args: self.ik(rover_to_axes(args))
+                            elif command == "apply_index":
+                                self.apply_index()
                             elif is_number(command):
                                 motor = int(command)
                                 power = float(line.pop(0))
@@ -427,8 +441,26 @@ class CanWorker(DeviceWorker):
         self.send(200, [38, 1800 >> 8, 1800 & 0xff])
 
     @remote
+    def apply_index(self):
+        def set(motor, angle):
+            a = int(angle * 10)
+            if a < 0:
+                a = 0
+            if a >= 3600:
+                a = 3599
+            self.send(motor, [38, a >> 8, a & 0xff])
+        set(190, self.encoders[190] + 158.5 - self.index_pulses[190])
+        set(191, self.encoders[191] + 113.0 - self.index_pulses[191])
+        set(201, self.encoders[201] + 163.0 - self.index_pulses[201])
+        set(200, self.encoders[200] + 200.0 - self.index_pulses[200])
+
+    @remote
     def get_encoders(self):
         return self.encoders
+
+    @remote
+    def get_index_pulses(self):
+        return self.index_pulses
 
     @remote
     def set_ik(self, on = True):
@@ -549,11 +581,32 @@ class Can(DeviceOverZeroMQ):
         layout.addWidget(self.battery_label)
         layout.addWidget(self.battery_bar)
         self.edits = []
+        self.editsenc = []
+        self.editsind = []
+        self.labelsenc = []
         for i in range(3):
             edit = QtWidgets.QLineEdit()
-            edit.setFixedWidth(175)
+            edit.setFixedWidth(100)
             vlayout.addWidget(edit)
             self.edits.append(edit)
+
+        ewidget = QtWidgets.QWidget()
+        elayout = QtWidgets.QGridLayout(ewidget)
+        layout.addWidget(ewidget)
+
+        for i in range(4):
+            labelenc = QtWidgets.QLabel("None")
+            labelenc.setFixedWidth(28)
+            elayout.addWidget(labelenc, i, 0)
+            self.labelsenc.append(labelenc)
+            editenc = QtWidgets.QLineEdit()
+            editenc.setFixedWidth(45)
+            elayout.addWidget(editenc, i, 1)
+            self.editsenc.append(editenc)
+            editind = QtWidgets.QLineEdit()
+            editind.setFixedWidth(45)
+            elayout.addWidget(editind, i, 2)
+            self.editsind.append(editind)
 
         layout.addStretch(1)
 
@@ -576,6 +629,16 @@ class Can(DeviceOverZeroMQ):
         self.edits[2].setText(str(status["terrain_slope"] / deg))
         self.battery_bar.setValue(status["battery"])
         self.battery_label.setText(str(status["battery"]) + '%\n' + str(round(status["voltage"], 2)) + ' V\n' + str(round(status["voltage"] / 6, 2)) + ' V\n')
+
+        try:
+            motors = list(status["encoders"].keys())
+            motors.sort()
+            for i in range(4):
+                self.labelsenc[i].setText(str(motors[i]))
+                self.editsenc[i].setText(str(status["encoders"][motors[i]]))
+                self.editsind[i].setText(str(status["index_pulses"][motors[i]]))
+        except Exception as e:
+            pass
     
     def send_from_gui(self):
         print(self.edits[0].text())

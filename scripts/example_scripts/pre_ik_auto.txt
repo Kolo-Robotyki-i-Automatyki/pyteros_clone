@@ -1,0 +1,11 @@
+low 190
+up 191
+rot 200
+grip 201
+5 low 1 up -1
+6 low -0.3 up 0.3
+0 low 0 up 0
+3 grip 0.3 rot 0.3
+6 grip -0.3 rot -0.3
+3 grip 0.3 rot 0.3
+0 grip 0 rot 0
