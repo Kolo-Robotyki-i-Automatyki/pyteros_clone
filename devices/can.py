@@ -3,6 +3,8 @@ from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,remote,include_r
 from PyQt5 import QtWidgets,QtCore,QtGui
 from time import perf_counter as clock
 from time import sleep
+from collections import deque
+from devices.pid import PID
 
 from devices.ik import axes_to_arm, axes_to_rover, arm_to_axes, arm_to_rover, rover_to_arm, rover_to_axes
 
@@ -46,6 +48,14 @@ class CanWorker(DeviceWorker):
         super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
         self.messages = []
         self.wheels = [0, 0, 0, 0]
+        self.wheels_target = [0, 0, 0, 0]
+        self.wheels_pid = False
+        self.wheels_manual = False
+        self.wheels_last_time_manual = clock()
+        self.wheels_pid_controllers = [PID() for k in range(4)]
+        #self.wheels_pid_params = [0, 0, 0]
+        #self.wheels_pid_lastvals = [deque([0 for i in range(101)]) for k in range(4)]
+        #self.wheels_pid_integral = [0 for k in range(4)]
         self.battery_v = [0, 0, 0, 0]
         self.compass_pitch = 0.0
         self.compass_roll = 0.0
@@ -76,6 +86,7 @@ class CanWorker(DeviceWorker):
         self.msg_thread = threading.Thread(target=self.loop_read)
         self.msg_thread.start()
 
+        self.wheels_lock = threading.Lock()
         self.position_thread = threading.Thread(target=self.loop_position)
         self.position_thread.start()
 
@@ -112,11 +123,6 @@ class CanWorker(DeviceWorker):
         self.send(201, [18, 100])
         self.send(200, [18, 100])
 
-        self.send(190, [38, 1800 >> 8, 1800 & 0xff])
-        self.send(191, [38, 1800 >> 8, 1800 & 0xff])
-        self.send(201, [38, 1800 >> 8, 1800 & 0xff])
-        self.send(200, [38, 1800 >> 8, 1800 & 0xff])
-
         print("Can initialized")
 
 
@@ -136,9 +142,6 @@ class CanWorker(DeviceWorker):
         #self.compass_roll = list[2] * 3.14159 / 180
         #print(list)
 
-        with self.data_lock:
-            print([self.index_pulses, self.encoders])
-
         self.compass_terrain_direction = (self.compass_heading - math.atan2(self.compass_roll, self.compass_pitch)) % (
                     2 * PI)
         self.compass_terrain_slope = math.asin((math.sin(self.compass_pitch) ** 2 + math.cos(
@@ -153,6 +156,7 @@ class CanWorker(DeviceWorker):
             d["voltage"] = sum(self.battery_v) / 40.0
             d["encoders"] = self.encoders
             d["index_pulses"] = self.index_pulses
+            d["wheels"] = self.wheels
 
             s = sum(self.battery_v)
             if s < 4 * 180:
@@ -220,17 +224,48 @@ class CanWorker(DeviceWorker):
                 with self.msg_lock:
                     self.messages.append(msg)
 
+    @remote
+    def set_pid_wheels(self, on=True, params = None):
+        self.wheels_target = [v for v in self.wheels]
+        if params is not None:
+            for i in range(4):
+                self.wheels_pid_controllers[i].set_params(params)
+        self.wheels_pid = on
+
+
     def loop_position(self):
-        sleep(2)
+        sleep(1)
         self.last_tacho = self.tacho()
+        FPS = 100
+        dt = 1.0 / FPS
+        last_clock = clock()
         while True:
-            sleep(0.05)
+            with self.data_lock:
+                pid = self.wheels_pid
+                position = self.wheels
+                target = self.wheels_target
+            with self.wheels_lock:
+                pid = pid and clock() > self.wheels_last_time_manual + 0.5
+            if pid:
+                for i in range(4):
+                    error = target[i] - position[i]
+                    power = self.wheels_pid_controllers[i].step(dt, error)
+                    self.power(140 + i, power)
+            else:
+                with self.data_lock:
+                    self.wheels_target = [v for v in position]
+
             tacho = self.tacho()
             dx = tacho - self.last_tacho
             self.last_tacho = tacho
             with self.data_lock:
                 heading = self.compass_heading
                 self.position = (self.position[0] + math.sin(heading) * dx, self.position[1] + math.cos(heading) * dx)
+
+            while clock() < last_clock + dt:
+                pass
+            last_clock = clock() + dt
+
 
     def loop_blink(self):
         while True:
@@ -340,14 +375,18 @@ class CanWorker(DeviceWorker):
                                 functions["__ik__"] = lambda args=args: self.ik(rover_to_axes(args))
                             elif command == "apply_index":
                                 self.apply_index()
-                            elif is_number(command):
-                                motor = int(command)
-                                power = float(line.pop(0))
-                                functions[motor] = lambda motor=motor, power=power: self.power(motor, power)
                             else:
-                                motor = var_dict[command]
+                                if is_number(command):
+                                    motor = int(command)
+                                else:
+                                    motor = var_dict[command]
                                 power = float(line.pop(0))
-                                functions[motor] = lambda motor=motor, power=power: self.power(motor, power)
+                                if abs(power) < 0.000001:
+                                    self.power(motor, 0)
+                                    functions[motor] = lambda: None
+                                else:
+                                    functions[motor] = lambda motor=motor, power=power: self.power(motor, power)
+
                     else:
                         var_dict[first] = int(line.pop(0))
 
@@ -449,8 +488,8 @@ class CanWorker(DeviceWorker):
             if a >= 3600:
                 a = 3599
             self.send(motor, [38, a >> 8, a & 0xff])
-        set(190, self.encoders[190] + 158.5 - self.index_pulses[190])
-        set(191, self.encoders[191] + 113.0 - self.index_pulses[191])
+        set(190, self.encoders[190] + 153.8 - self.index_pulses[190])
+        set(191, self.encoders[191] + 117.7 - self.index_pulses[191])
         set(201, self.encoders[201] + 163.0 - self.index_pulses[201])
         set(200, self.encoders[200] + 200.0 - self.index_pulses[200])
 
@@ -524,6 +563,10 @@ class CanWorker(DeviceWorker):
             self.throttle = power
         if axis == 1: #turning
             self.turning = power
+
+        with self.wheels_lock:
+            if abs(self.throttle) + abs(self.turning) > 0.000001:
+                self.wheels_last_time_manual = clock()
         left = self.throttle + self.turning
         right = -self.throttle + self.turning
         self.power(129, left)
@@ -583,6 +626,7 @@ class Can(DeviceOverZeroMQ):
         self.edits = []
         self.editsenc = []
         self.editsind = []
+        self.editswheels = []
         self.labelsenc = []
         for i in range(3):
             edit = QtWidgets.QLineEdit()
@@ -595,18 +639,32 @@ class Can(DeviceOverZeroMQ):
         layout.addWidget(ewidget)
 
         for i in range(4):
+            editwheel = QtWidgets.QLineEdit()
+            editwheel.setFixedWidth(45)
+            elayout.addWidget(editwheel, i, 0)
+            self.editswheels.append(editwheel)
             labelenc = QtWidgets.QLabel("None")
             labelenc.setFixedWidth(28)
-            elayout.addWidget(labelenc, i, 0)
+            elayout.addWidget(labelenc, i, 1)
             self.labelsenc.append(labelenc)
             editenc = QtWidgets.QLineEdit()
             editenc.setFixedWidth(45)
-            elayout.addWidget(editenc, i, 1)
+            elayout.addWidget(editenc, i, 2)
             self.editsenc.append(editenc)
             editind = QtWidgets.QLineEdit()
             editind.setFixedWidth(45)
-            elayout.addWidget(editind, i, 2)
+            elayout.addWidget(editind, i, 3)
             self.editsind.append(editind)
+
+        pidwidget = QtWidgets.QWidget()
+        pidlayout = QtWidgets.QVBoxLayout(pidwidget)
+        layout.addWidget(pidwidget)
+
+        self.button_pid = QtWidgets.QPushButton("Lock Wheels")
+        pidlayout.addWidget(self.button_pid)
+        self.button_pid.clicked.connect(self.lock_pid)
+        self.button_pid.setCheckable(True)
+        self.pid_locked = False
 
         layout.addStretch(1)
 
@@ -620,7 +678,15 @@ class Can(DeviceOverZeroMQ):
         #self.increaseVoltageButton.clicked.connect(lambda pressed: self.incVoltage())
         self.createListenerThread(self.updateSlot)
 
-
+    def lock_pid(self):
+        if self.pid_locked:
+            self.pid_locked = False
+            self.button_pid.setDown(False)
+            self.set_pid_wheels(0)
+        else:
+            self.pid_locked = True
+            self.button_pid.setDown(True)
+            self.set_pid_wheels(1)
 
         
     def updateSlot(self, status):
@@ -631,6 +697,9 @@ class Can(DeviceOverZeroMQ):
         self.battery_label.setText(str(status["battery"]) + '%\n' + str(round(status["voltage"], 2)) + ' V\n' + str(round(status["voltage"] / 6, 2)) + ' V\n')
 
         try:
+            for i in range(4):
+                self.editswheels[i].setText(str(status["wheels"][i]))
+
             motors = list(status["encoders"].keys())
             motors.sort()
             for i in range(4):
@@ -638,7 +707,7 @@ class Can(DeviceOverZeroMQ):
                 self.editsenc[i].setText(str(status["encoders"][motors[i]]))
                 self.editsind[i].setText(str(status["index_pulses"][motors[i]]))
         except Exception as e:
-            pass
+            raise e
     
     def send_from_gui(self):
         print(self.edits[0].text())

@@ -67,7 +67,7 @@ class Process(QtCore.QObject):
 
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.checkOnProcess)
-        self.timer.start(2000)
+        self.timer.start(200)
 
     def __del__(self):
         self.listener.continue_running = False

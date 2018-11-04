@@ -16,7 +16,7 @@ class NoRequiredDevicesError(Exception):
 
 
 epsilon = 0.00000001
-dead_zone = 0.08
+dead_zone = 0.14
 
 
 class Master():
