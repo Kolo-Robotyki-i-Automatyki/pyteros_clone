@@ -9,3 +9,4 @@ grip 201
 6 grip -0.3 rot -0.3
 3 grip 0.3 rot 0.3
 0 grip 0 rot 0
+0 apply_index
