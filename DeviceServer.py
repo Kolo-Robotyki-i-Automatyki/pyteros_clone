@@ -50,7 +50,7 @@ class WidgetForProcess(QtWidgets.QWidget):
         self.sub_socket.setsockopt(zmq.SUBSCRIBE, b'std')
         
         self.process = None
-        
+
         layout = QtWidgets.QVBoxLayout()
         layout2 = QtWidgets.QHBoxLayout()
         label1 = QtWidgets.QLabel("REQ port:")

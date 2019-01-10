@@ -5,16 +5,25 @@ from time import perf_counter as clock
 from time import sleep, time
 from collections import deque
 from devices.pid import PID
-
+#from devices.temphum import DHT22
 from devices.ik import axes_to_arm, axes_to_rover, arm_to_axes, arm_to_rover, rover_to_arm, rover_to_axes
-
 from scipy import optimize
 from devices.imu_get import Orientation
 import math
 from math import sin, cos
 import threading
 try:
+    import serial
+except Exception:
+    pass
+
+try:
     import can
+except Exception:
+    pass
+
+try:
+    import Adafruit_DHT
 except Exception:
     pass
 
@@ -56,9 +65,6 @@ class CanWorker(DeviceWorker):
         self.wheels_manual = False
         self.wheels_last_time_manual = clock()
         self.wheels_pid_controllers = [PID() for k in range(4)]
-        #self.wheels_pid_params = [0, 0, 0]
-        #self.wheels_pid_lastvals = [deque([0 for i in range(101)]) for k in range(4)]
-        #self.wheels_pid_integral = [0 for k in range(4)]
         self.battery_v = [0, 0, 0, 0]
         self.compass_pitch = 0.0
         self.compass_roll = 0.0
@@ -76,8 +82,11 @@ class CanWorker(DeviceWorker):
         self.ik_speed = [0, 0, 0, 0]
         self.ik_update_timestamp = clock()
         self.ik_watchdog_timestamp = clock() - 1
-        self.air_temperature = 0
         self.air_humidity = 0
+        self.air_temperature = 0
+        self.air_co2 = 0
+        self.soil_temperature = 0
+        self.soil_humidity = 0
         self.logfile = open("vlog.txt", "a");
         self.logc = 0
 
@@ -99,6 +108,11 @@ class CanWorker(DeviceWorker):
 
         self.ik_thread = threading.Thread(target=self.loop_ik)
         self.ik_thread.start()
+
+        self.serial_dht22 = serial.Serial('/dev/ttyAMA0', 115200, timeout=5)
+        self.lock_dht22 = threading.Lock()
+        self.thread_dht22 = threading.Thread(target=self.loop_dht22)
+        self.thread_dht22.start()
 
         self.set_blink()
         self.blink_thread = threading.Thread(target=self.loop_blink)
@@ -141,18 +155,6 @@ class CanWorker(DeviceWorker):
         if self.is_ik:
             self.ik(self.ik_x, self.ik_y, self.ik_a, self.ik_d)
 
-        #with self.data_lock:
-            #list = self.orientation.get_orientation()
-
-        #self.compass_heading = ((list[0] + 73.8 + 5.7) * 3.14159 / 180) % (2 * PI)
-        #self.compass_pitch = list[1] * 3.14159 / 180
-        #self.compass_roll = list[2] * 3.14159 / 180
-        #print(list)
-
-        self.compass_terrain_direction = (self.compass_heading - math.atan2(self.compass_roll, self.compass_pitch)) % (
-                    2 * PI)
-        self.compass_terrain_slope = math.asin((math.sin(self.compass_pitch) ** 2 + math.cos(
-            self.compass_pitch) ** 2 * math.sin(self.compass_roll) ** 2) ** 0.5)
 
         d = super().status()
         d["connected"] = True
@@ -164,8 +166,11 @@ class CanWorker(DeviceWorker):
             d["encoders"] = self.encoders
             d["index_pulses"] = self.index_pulses
             d["wheels"] = self.wheels
-            d["air_temperature"] = self.air_temperature
-            d["air_humidity"] = self.air_humidity
+            d["air_temperature"] = self.get_air_temperature()
+            d["air_humidity"] = self.get_air_humidity()
+            d["air_co2"] = self.air_co2
+            d["soil_temperature"] = self.soil_temperature
+            d["soil_humidity"] = self.soil_humidity
 
             s = sum(self.battery_v)
             if s < 4 * 180:
@@ -193,14 +198,13 @@ class CanWorker(DeviceWorker):
                 print((msg.arbitration_id - 1024, list(msg.data)))
             self.messages = []
 
-    def loop_ik(self):
+    def loop_ik(self): # function for constant speed pad arm movement with use of ik
         while True:
             with self.data_lock:
                 speed = self.ik_speed
             if speed != [0, 0, 0, 0]:
                 self.ik_watchdog_timestamp = clock()
             if self.ik_watchdog_timestamp + 0.5 < clock():
-                #print("booring")
                 self.ik_update_timestamp = clock()
                 with self.data_lock:
                     self.ik_position = (self.encoders[190] * deg, self.encoders[191] * deg, self.encoders[201] * deg, self.encoders[200] * deg)
@@ -211,9 +215,12 @@ class CanWorker(DeviceWorker):
                 dt = clock() - self.ik_update_timestamp
                 self.ik_update_timestamp = clock()
                 position_arm_new = [position_arm[i] + speed[i] * dt for i in range(4)]
-                position_new = arm_to_axes(position_arm_new)
-                self.ik_position = position_new  
-                self.ik(position_new[0:3])
+                try:
+                    position_new = arm_to_axes(position_arm_new)
+                    self.ik_position = position_new
+                    self.ik(position_new[0:3])
+                except Exception as e:
+                    print(e)
             sleep(0.030)
 
     def loop_read(self):
@@ -241,10 +248,13 @@ class CanWorker(DeviceWorker):
                 self.compass_heading = (list_to_int(msg.data[5:7]) * 3.14159 / 180 / 10) % (2 * PI)
                 self.compass_pitch = list_to_int(msg.data[1:3])  * 3.14159 / 180 / 10
                 self.compass_roll = list_to_int(msg.data[3:5])  * 3.14159 / 180 / 10
+                self.compass_terrain_direction = (self.compass_heading - math.atan2(self.compass_roll, self.compass_pitch)) % (2 * PI)
+                self.compass_terrain_slope = math.asin((math.sin(self.compass_pitch) ** 2 + math.cos(self.compass_pitch) ** 2 * math.sin(self.compass_roll) ** 2) ** 0.5)
             elif msg.data[0] == 80:
-                self.air_temperature = list_to_int(msg.data[1:3]) / 100
+                self.soil_humidity = (2.56 - list_to_int(msg.data[1:3]) * 528 / 624 / 1000) / (2.56 - 1.35) * 100
+                print(self.soil_humidity)
             elif msg.data[0] == 83:
-                self.air_humidity = list_to_int(msg.data[1:3]) / 100
+                self.air_co2 =((list_to_int(msg.data[1:3]) * 528 / 624 / 1000) - 0.4) / 1.6 * 5000 #* 100 / 13.7
             else:
                 with self.msg_lock:
                     self.messages.append(msg)
@@ -290,6 +300,25 @@ class CanWorker(DeviceWorker):
             while clock() < last_clock + dt:
                 pass
             last_clock = clock() + dt
+
+    def loop_dht22(self):
+        while 1:
+            try:
+                sleep(0.1)
+                line = self.serial_dht22.readline()
+                if line[0:10] == b'Sample OK:':
+                    temp = float(line[10:17])
+                    hum = float(line[20:27])
+                #=================================
+                #Sample DHT22...
+                #Sample OK: 33.10 *C, 36.30 RH%
+                #=================================
+                    if hum is not None and temp is not None:
+                        with self.lock_dht22:
+                            self.air_humidity = hum
+                            self.air_temperature = temp
+            except Exception as e:
+                print(e)
 
 
     def loop_blink(self):
@@ -452,6 +481,15 @@ class CanWorker(DeviceWorker):
             self.send(307, [5, id % 8, int(self.servopos[id]) >> 8, int(self.servopos[id]) & 0xff])
 
     @remote
+    def servo_pos(self, id, pos):
+        if id // 8 == 0:
+            self.send(306, [5, id % 8, int(pos) >> 8, int(pos) & 0xff])
+        if id // 8 == 1:
+            self.send(305, [5, id % 8, int(pos) >> 8, int(pos) & 0xff])
+        if id // 8 == 2:
+            self.send(307, [5, id % 8, int(pos) >> 8, int(pos) & 0xff])
+
+    @remote
     def servos(self):
         return [("servo_306:" + str(i%8), i) for i in range(0, 8)] + [("servo_305:" + str(i%8), i) for i in range(8, 16)] + [("servo_307:" + str(i%8), i) for i in range(16, 24)]
 
@@ -535,7 +573,7 @@ class CanWorker(DeviceWorker):
         self.ik(tx, ty, ta * PI / 180, td * PI / 180)
 
     @remote
-    def ik(self, params):
+    def ik(self, params): # execute given goal angles - send to motor drivers
         if len(params) == 4:
             outa, outb, outc, outd = [int((v % (2 * PI)) * 1800 / PI) for v in params]
             self._bus.send(can.Message(arbitration_id=int(190),
@@ -546,7 +584,7 @@ class CanWorker(DeviceWorker):
                                         data=[8, (outc >> 8) & 0xff, outc & 0xff], extended_id=False))
             self._bus.send(can.Message(arbitration_id=int(200),
                                         data=[8, (outd >> 8) & 0xff, outd & 0xff], extended_id=False))
-        else:
+        else: # without arm rotation
             outa, outb, outc = [int((v % (2 * PI)) * 1800 / PI) for v in params]
             self._bus.send(can.Message(arbitration_id=int(190),
                                        data=[8, (outa >> 8) & 0xff, outa & 0xff], extended_id=False))
@@ -592,10 +630,24 @@ class CanWorker(DeviceWorker):
         with self.wheels_lock:
             if abs(self.throttle) + abs(self.turning) > 0.000001:
                 self.wheels_last_time_manual = clock()
-        left = self.throttle + self.turning
-        right = -self.throttle + self.turning
-        self.power(129, left)
-        self.power(130, right)
+        left = -self.throttle #+ self.turning / 2
+        right = -self.throttle #- self.turning / 2
+        left /= 2
+        right /= 2
+        turn = -self.turning
+        #if self.throttle < 0:
+        #    turn = -turn
+        if left < -0.5:
+            left = -0.5
+        if left > 0.5:
+            left = 0.5
+        if right < -0.5:
+            right = -0.5
+        if right > 0.5:
+            right = 0.5
+        self.power(194, left)
+        self.power(197, right)
+        self.power(195, turn)
 
     @remote
     def axes(self):
@@ -619,6 +671,16 @@ class CanWorker(DeviceWorker):
                + [("wheel_" + str(i - 140), i) for i in range(140, 144)] \
                + [("", i) for i in range(194, 200)] \
                + [("", i) for i in range(202, 210)]
+
+    @remote
+    def get_air_temperature(self):
+        with self.lock_dht22:
+            return round(self.air_temperature, 2)
+
+    @remote
+    def get_air_humidity(self):
+        with self.lock_dht22:
+            return round(self.air_humidity, 2)
     
 @include_remote_methods(CanWorker)
 class Can(DeviceOverZeroMQ):
@@ -663,10 +725,10 @@ class Can(DeviceOverZeroMQ):
             layout_imu.addWidget(edit, i, 1)
             self.edits.append(edit)
 
-        for i in range(2):
+        for i in range(5):
             edit = QtWidgets.QLineEdit()
             edit.setFixedWidth(100)
-            layout_sensors.addWidget(QtWidgets.QLabel(["Air temp.", "Air hum."][i]), i, 0)
+            layout_sensors.addWidget(QtWidgets.QLabel(["Air temp.", "Air hum.", "Air co2 (ppm)", "Soil temp.", "Soil hum."][i]), i, 0)
             layout_sensors.addWidget(edit, i, 1)
             self.edits_sensors.append(edit)
 
@@ -727,6 +789,9 @@ class Can(DeviceOverZeroMQ):
     def updateSlot(self, status):
         self.edits_sensors[0].setText(str(round(status["air_temperature"], 2)))
         self.edits_sensors[1].setText(str(round(status["air_humidity"], 2)))
+        self.edits_sensors[2].setText(str(round(status["air_co2"], 2)))
+        self.edits_sensors[3].setText(str(round(status["soil_temperature"], 2)))
+        self.edits_sensors[4].setText(str(round(status["soil_humidity"], 2)))
         self.edits[0].setText(str(round(status["heading"] / deg, 2)))
         self.edits[1].setText(str(round(status["terrain_direction"] / deg, 2)))
         self.edits[2].setText(str(round(status["terrain_slope"] / deg, 2)))

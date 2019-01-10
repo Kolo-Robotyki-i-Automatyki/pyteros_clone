@@ -29,9 +29,9 @@ class Reach():
                     except IndexError:
                         pass
 
-if __name__ == "__main__":
-    reach = Reach()
-    while True:
-        time.sleep(0.5)
-        with reach.tcp_lock:
-            print(reach.status)
+#if __name__ == "__main__":
+reach = Reach()
+while True:
+    time.sleep(0.5)
+    with reach.tcp_lock:
+        print(reach.status)

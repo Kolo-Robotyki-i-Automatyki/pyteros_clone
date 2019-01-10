@@ -14,6 +14,8 @@ import zmq
 import devices
 import sys,traceback
 
+
+
 class ZMQ_Listener(QtCore.QObject):
     """ A class to implement a thread listening for stdout/stderr 
     from other thread via a ZeroMQ PUB/SUB socket pair """
