@@ -151,6 +151,13 @@ if __name__ == '__main__':
         except Exception as e:
             traceback.print_exc(file=sys.stdout)
 
+        try:
+            from src.path_widget import path_widget
+            widget = path_widget.PathCreator()
+            window.addPage(widget, "Autonomy")
+        except Exception as e:
+            traceback.print_exc(file=sys.stdout)
+
         window.show()
         app.exec_()
                 
