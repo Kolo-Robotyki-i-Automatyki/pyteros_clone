@@ -18,6 +18,12 @@ class Reach():
         self.tcp_thread = threading.Thread(target=self.loop_tcp)
         self.tcp_thread.start()
 
+    def get_status(self):
+        with self.tcp_lock:
+            status = self.status
+        return status
+
+
     def loop_tcp(self):
         while 1:
             data = self.socket.recv(BUFSIZE).decode("utf-8")
@@ -30,8 +36,8 @@ class Reach():
                         pass
 
 #if __name__ == "__main__":
-reach = Reach()
-while True:
-    time.sleep(0.5)
-    with reach.tcp_lock:
-        print(reach.status)
+#reach = Reach()
+#while True:
+#    time.sleep(0.5)
+#    with reach.tcp_lock:
+#        print(reach.status)

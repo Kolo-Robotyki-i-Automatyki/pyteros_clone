@@ -18,6 +18,11 @@ except Exception:
     pass
 
 try:
+    from devices.reach_tcp import Reach
+except Exception as e:
+    print(e)
+
+try:
     import can
 except Exception:
     pass
@@ -42,7 +47,7 @@ L1 = 602.
 L2 = 478.
 deg = PI / 180
 
-waypoints = [[], [[10,6], [7.5, 8.5]], [[10,18], [14.8, 21.0]], [], [[46.0, 13.0], [48.8, 14.1]]]
+waypoints = [[1.0, 1.0], [-1.0, 5.0]]
 
 arm_lower = 190
 arm_upper = 191
@@ -119,9 +124,10 @@ class CanWorker(DeviceWorker):
         self.blink_thread.start()
 
         self.set_auto()
-        self.waypoint = 0
+        self.waypoint = -1
         self.auto_thread = threading.Thread(target=self.loop_auto)
         self.auto_thread.start()
+        self.reach = Reach()
 
         self.script_lock = threading.Lock()
         self.script_stop = 0
@@ -333,44 +339,71 @@ class CanWorker(DeviceWorker):
     def set_blink(self, on = 1):
         self.blink = on
 
+
+
+
+
+
     def loop_auto(self):
         while True:
             sleep(0.1)
             with self.auto_lock:
                 wp = self.waypoint
-            if wp != 0:
-                for point in waypoints[wp]:
-                    self.drive_to(point)
-                    self.drive_to(point)
+            if wp != -1:
+                while wp < len(waypoints):
+                    self.drive_to(waypoints[wp])
+                    sleep(5)
+                    wp += 1
+                    if self.waypoint == -1:
+                        break
 
     def drive_to(self, point):
-        with self.data_lock:
-            angle = (self.atan2(point[1] - self.position[1], point[0] - self.position[0]) + PI) % (2 * PI)
-        print(angle)
         while True:
+            with self.auto_lock:
+                position = self.get_position()
+                angle = (math.atan2(point[1] - position[1], point[0] - position[0]) + PI) % (2 * PI)
+                distance = math.sqrt((point[1] - position[1]) ** 2 + (point[0] - position[0]) ** 2)
+            if distance < 2:
+                break
             with self.data_lock:
                 heading = self.compass_heading
-            if abs(heading - angle) < 6 * deg or abs(heading - angle) > 354 * deg:
+            angle_difference = min(abs(heading - angle), 2 * PI - abs(heading - angle))
+
+            turning = math.sin(angle - heading)
+            print([position, point, heading, angle, distance, angle_difference, turning])
+            if angle_difference > PI/2:
+                if turning < 0:
+                    turning = -1
+                else:
+                    turning = 1
+            turning = max(min(turning * 2, 1), -1)
+
+            print(turning)
+            #self.drive(1, turning)
+            #self.drive(0, 0.4)
+            sleep(0.1)
+            if self.waypoint == -1:
                 break
-            else:
-                self.drive(1, 0.6)
-                sleep(0.05)
-        with self.data_lock:
-            distance = ((point[1] - self.position[1]) ** 2 + (point[0] - self.position[0]) ** 2) ** 0.5
-            goal_tacho = self.tacho() + distance - 0.2
-        while True:
-            with self.data_lock:
-                tacho = self.tacho()
-            if tacho > goal_tacho:
-                break
-            else:
-                self.drive(0, 0.25)
-                sleep(0.05)
 
     @remote
-    def set_auto(self, waypoint = 1):
+    def set_auto(self, waypoint = 0):
         with self.auto_lock:
             self.waypoint = waypoint
+
+    @remote
+    def get_position(self):
+        with self.data_lock:
+            #print(self.reach.get_status())
+            return (1.0, 0.0)
+            #if axis == 0:
+            #    return self.reach.x()
+            #else:
+            #    return self.reach.y()
+
+
+
+
+
 
     @remote
     def abort_script(self):
@@ -519,11 +552,6 @@ class CanWorker(DeviceWorker):
             return []
 
     @remote
-    def get_position(self, axis):
-        with self.data_lock:
-            return self.position[axis]
-
-    @remote
     def tacho(self):
         with self.data_lock:
             return 0.5 * (self.wheels[1] - self.wheels[3]) / erpm_per_meter
@@ -630,8 +658,8 @@ class CanWorker(DeviceWorker):
         with self.wheels_lock:
             if abs(self.throttle) + abs(self.turning) > 0.000001:
                 self.wheels_last_time_manual = clock()
-        left = -self.throttle #+ self.turning / 2
-        right = -self.throttle #- self.turning / 2
+        left = self.throttle #+ self.turning / 2
+        right = self.throttle #- self.turning / 2
         left /= 2
         right /= 2
         turn = -self.turning
