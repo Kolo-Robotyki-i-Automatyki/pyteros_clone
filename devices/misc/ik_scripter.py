@@ -24,9 +24,9 @@ class IKScripterWidget(QtWidgets.QWidget):
                 break
         except Exception as e:
             print(e)
-        if self.rover == None:
-            from src.measurement_tab import NoRequiredDevicesError
-            raise NoRequiredDevicesError("No rover found")
+        #if self.rover == None:
+        #    from src.measurement_tab import NoRequiredDevicesError
+        #    raise NoRequiredDevicesError("No rover found")
 
         self._createWidgets()
 
@@ -94,6 +94,7 @@ class IKScripterWidget(QtWidgets.QWidget):
         self.files = []
         self.indexes = {}
         for file in file_list[2:]:
+            print(file)
             if file[-4:] != '.txt':
                 continue
             name = file[0:-4]

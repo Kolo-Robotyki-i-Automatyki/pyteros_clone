@@ -8,7 +8,7 @@ from devices.pid import PID
 #from devices.temphum import DHT22
 from devices.ik import axes_to_arm, axes_to_rover, arm_to_axes, arm_to_rover, rover_to_arm, rover_to_axes
 from scipy import optimize
-from devices.imu_get import Orientation
+import subprocess
 import math
 from math import sin, cos
 import threading
@@ -17,10 +17,7 @@ try:
 except Exception:
     pass
 
-try:
-    from devices.reach_tcp import Reach
-except Exception as e:
-    print(e)
+from devices.reach_tcp import Reach
 
 try:
     import can
@@ -47,12 +44,11 @@ L1 = 602.
 L2 = 478.
 deg = PI / 180
 
-waypoints = [[1.0, 1.0], [-1.0, 5.0]]
-
 arm_lower = 190
 arm_upper = 191
 arm_rot = 200
 grip_lat = 201
+relative_position_origin = (52.211415, 20.983336)
 
 def list_to_int(bytes):
     return int.from_bytes(bytearray(bytes), byteorder='big', signed=True)
@@ -81,8 +77,8 @@ class CanWorker(DeviceWorker):
         self.position = (24.3, 4.3)
         self.is_ik = False
         self.ikpositions = [0.85 * PI, 0.65 *PI, PI, PI]
-        self.encoders = {190:0, 191:0, 200:0, 201:0}
-        self.index_pulses = {190:500.0, 191:500.0, 200:500.0, 201:500.0}
+        self.encoders = {arm_lower:0, arm_upper:0, arm_rot:0, grip_lat:0}
+        self.index_pulses = {arm_lower:500.0, arm_upper:500.0, arm_rot:500.0, grip_lat:500.0}
         self.ik_position = [150 * deg, 90 * deg, 240 * deg, 180 * deg]
         self.ik_speed = [0, 0, 0, 0]
         self.ik_update_timestamp = clock()
@@ -94,6 +90,8 @@ class CanWorker(DeviceWorker):
         self.soil_humidity = 0
         self.logfile = open("vlog.txt", "a");
         self.logc = 0
+        self.waypoints = []
+        self.waypoint = -1
 
     def init_device(self):
         self._bus = can.interface.Bus(bustype="socketcan", channel="can0", bitrate=250000)
@@ -123,11 +121,13 @@ class CanWorker(DeviceWorker):
         self.blink_thread = threading.Thread(target=self.loop_blink)
         self.blink_thread.start()
 
-        self.set_auto()
-        self.waypoint = -1
         self.auto_thread = threading.Thread(target=self.loop_auto)
         self.auto_thread.start()
-        self.reach = Reach()
+        try:
+            self.reach = Reach()
+        except:
+            self.reach = None
+            print("No connection with reach.")
 
         self.script_lock = threading.Lock()
         self.script_stop = 0
@@ -138,17 +138,16 @@ class CanWorker(DeviceWorker):
         self.send(128, [20,10])
         self.send(400, [100, 0, 100])
 
-        self.servopos = [1500 for i in range(24)]
+        self.servopos = [1500 for i in range(124)]
         self.servopos[0] = 1730
         self.servo(0, 1)
 
-        self.orientation = Orientation("10.1.1.200", 5555, 81, debug_log=False)
         #self.tag_reader = TagReader()
 
-        self.send(190, [18, 100])
-        self.send(191, [18, 100])
-        self.send(201, [18, 100])
-        self.send(200, [18, 100])
+        self.send(arm_lower, [18, 100])
+        self.send(arm_upper, [18, 100])
+        self.send(grip_lat, [18, 100])
+        self.send(arm_rot, [18, 100])
 
         print("Can initialized")
 
@@ -164,6 +163,8 @@ class CanWorker(DeviceWorker):
 
         d = super().status()
         d["connected"] = True
+        d["position"] = self.get_position()
+        d["coordinates"] = self.get_coordinates()
         with self.data_lock:
             d["heading"] = self.compass_heading
             d["terrain_direction"] = self.compass_terrain_direction
@@ -213,7 +214,7 @@ class CanWorker(DeviceWorker):
             if self.ik_watchdog_timestamp + 0.5 < clock():
                 self.ik_update_timestamp = clock()
                 with self.data_lock:
-                    self.ik_position = (self.encoders[190] * deg, self.encoders[191] * deg, self.encoders[201] * deg, self.encoders[200] * deg)
+                    self.ik_position = (self.encoders[arm_lower] * deg, self.encoders[arm_upper] * deg, self.encoders[grip_lat] * deg, self.encoders[arm_rot] * deg)
             else:
                 #print("ok" + str(speed))
                 position = self.ik_position
@@ -231,8 +232,6 @@ class CanWorker(DeviceWorker):
 
     def loop_read(self):
         for msg in self._bus:
-            if msg.arbitration_id == 1024 + 190:
-                print((msg.arbitration_id - 1024, list(msg.data)))
             if msg.arbitration_id < 1024:
                 continue
             elif msg.arbitration_id >= 1024 + 140 and msg.arbitration_id <= 1024 + 143 and msg.data[0] == 30: # wheels encoder
@@ -326,7 +325,6 @@ class CanWorker(DeviceWorker):
             except Exception as e:
                 print(e)
 
-
     def loop_blink(self):
         while True:
             sleep(0.5)
@@ -339,19 +337,14 @@ class CanWorker(DeviceWorker):
     def set_blink(self, on = 1):
         self.blink = on
 
-
-
-
-
-
     def loop_auto(self):
         while True:
             sleep(0.1)
             with self.auto_lock:
                 wp = self.waypoint
             if wp != -1:
-                while wp < len(waypoints):
-                    self.drive_to(waypoints[wp])
+                while wp < len(self.waypoints):
+                    self.drive_to(self.waypoints[wp])
                     sleep(5)
                     wp += 1
                     if self.waypoint == -1:
@@ -359,11 +352,13 @@ class CanWorker(DeviceWorker):
 
     def drive_to(self, point):
         while True:
+            position = self.get_position()
             with self.auto_lock:
-                position = self.get_position()
-                angle = (math.atan2(point[1] - position[1], point[0] - position[0]) + PI) % (2 * PI)
+                angle = ( math.atan2(point[1] - position[1], (point[0] - position[0])) ) % (2 * PI)
                 distance = math.sqrt((point[1] - position[1]) ** 2 + (point[0] - position[0]) ** 2)
             if distance < 2:
+                self.drive(1, 0)
+                self.drive(0, 0)
                 break
             with self.data_lock:
                 heading = self.compass_heading
@@ -379,31 +374,62 @@ class CanWorker(DeviceWorker):
             turning = max(min(turning * 2, 1), -1)
 
             print(turning)
-            #self.drive(1, turning)
-            #self.drive(0, 0.4)
+            self.drive(1, turning)
+            self.drive(0, -0.4)
             sleep(0.1)
             if self.waypoint == -1:
                 break
 
     @remote
-    def set_auto(self, waypoint = 0):
+    def start_auto_from_waypoint(self, waypoint = 0):
         with self.auto_lock:
             self.waypoint = waypoint
 
     @remote
-    def get_position(self):
+    def get_coordinates(self):
+        if self.reach is not None:
+            return self.reach.get_status()
+        else:
+            return (0, 0)
+
+    @remote
+    def get_orientation(self):
         with self.data_lock:
-            #print(self.reach.get_status())
-            return (1.0, 0.0)
-            #if axis == 0:
-            #    return self.reach.x()
-            #else:
-            #    return self.reach.y()
+            o = self.compass_heading
+        return o
 
+    @remote
+    def get_position(self, axis=-1):
+        coords = self.get_coordinates()
+        x = (coords[1] - relative_position_origin[1]) * deg * 6371000 * math.cos(coords[0] * deg)
+        y = (coords[0] - relative_position_origin[0]) * deg * 6371000
+        if axis == 0:
+            return x
+        elif axis == 1:
+            return y
+        else:
+            return (x, y)
 
+    @remote
+    def set_waypoints(self, waypoints):
+        with self.auto_lock:
+            self.waypoints = waypoints
 
+    @remote
+    def get_waypoints(self):
+        with self.auto_lock:
+            waypoints = self.waypoints
+        return waypoints
 
+    @remote
+    def add_waypoint(self, position):
+        with self.auto_lock:
+            self.waypoints.append(position)
 
+    @remote
+    def add_waypoint_from_current_position(self):
+        position = self.get_position()
+        self.add_waypoint(position)
 
     @remote
     def abort_script(self):
@@ -512,6 +538,16 @@ class CanWorker(DeviceWorker):
             self.send(305, [5, id % 8, int(self.servopos[id]) >> 8, int(self.servopos[id]) & 0xff])
         if id // 8 == 2:
             self.send(307, [5, id % 8, int(self.servopos[id]) >> 8, int(self.servopos[id]) & 0xff])
+        if id == 101:
+            self.send(305, [5, 0, int(self.servopos[id]) >> 8, int(self.servopos[id]) & 0xff])
+            self.send(305, [5, 1, int(self.servopos[id]) >> 8, int(self.servopos[id]) & 0xff])
+            self.send(305, [5, 2, int(3000-self.servopos[id]) >> 8, int(3000-self.servopos[id]) & 0xff])
+            self.send(305, [5, 3, int(3000-self.servopos[id]) >> 8, int(3000-self.servopos[id]) & 0xff])
+        if id == 100:
+            self.send(305, [5, 4, int(self.servopos[id]) >> 8, int(self.servopos[id]) & 0xff])
+            self.send(305, [5, 5, int(self.servopos[id]) >> 8, int(self.servopos[id]) & 0xff])
+
+
 
     @remote
     def servo_pos(self, id, pos):
@@ -521,10 +557,21 @@ class CanWorker(DeviceWorker):
             self.send(305, [5, id % 8, int(pos) >> 8, int(pos) & 0xff])
         if id // 8 == 2:
             self.send(307, [5, id % 8, int(pos) >> 8, int(pos) & 0xff])
+        if id == 101:
+            self.send(305, [5, 0, int(pos) >> 8, int(pos) & 0xff])
+            self.send(305, [5, 1, int(pos) >> 8, int(pos) & 0xff])
+            self.send(305, [5, 2, int(3000 - pos) >> 8, int(3000 - pos) & 0xff])
+            self.send(305, [5, 3, int(3000 - pos) >> 8, int(3000 - pos) & 0xff])
+        if id == 100:
+            self.send(305, [5, 4, int(pos) >> 8, int(pos) & 0xff])
+            self.send(305, [5, 5, int(pos) >> 8, int(pos) & 0xff])
 
     @remote
     def servos(self):
-        return [("servo_306:" + str(i%8), i) for i in range(0, 8)] + [("servo_305:" + str(i%8), i) for i in range(8, 16)] + [("servo_307:" + str(i%8), i) for i in range(16, 24)]
+        return [("servo_306:" + str(i%8), i) for i in range(0, 8)] + \
+               [("servo_305:" + str(i%8), i) for i in range(8, 16)] + \
+               [("servo_307:" + str(i%8), i) for i in range(16, 24)] + \
+               [("arm_upper: 100", 100), ("grip_clamp: 101", 101)]
 
     @remote
     def tags(self):
@@ -565,10 +612,10 @@ class CanWorker(DeviceWorker):
     def start_ik(self):
         alfa = 796 + 900
         beta = 1253
-        self.send(190, [38, alfa >> 8, alfa & 0xff])
-        self.send(191, [38, beta >> 8, beta & 0xff])
-        self.send(201, [38, 1800 >> 8, 1800 & 0xff])
-        self.send(200, [38, 1800 >> 8, 1800 & 0xff])
+        self.send(arm_lower, [38, alfa >> 8, alfa & 0xff])
+        self.send(arm_upper, [38, beta >> 8, beta & 0xff])
+        self.send(grip_lat, [38, 1800 >> 8, 1800 & 0xff])
+        self.send(arm_rot, [38, 1800 >> 8, 1800 & 0xff])
 
     @remote
     def apply_index(self):
@@ -579,10 +626,10 @@ class CanWorker(DeviceWorker):
             if a >= 3600:
                 a = 3599
             self.send(motor, [38, a >> 8, a & 0xff])
-        set(190, self.encoders[190] + 153.8 - self.index_pulses[190])
-        set(191, self.encoders[191] + 117.7 - self.index_pulses[191])
-        set(201, self.encoders[201] + 152.0 - self.index_pulses[201])
-        set(200, self.encoders[200] + 200.0 - self.index_pulses[200])
+        set(arm_lower, self.encoders[arm_lower] + 153.8 - self.index_pulses[arm_lower])
+        set(arm_upper, self.encoders[arm_upper] + 117.7 - self.index_pulses[arm_upper])
+        set(grip_lat, self.encoders[grip_lat] + 152.0 - self.index_pulses[grip_lat])
+        set(arm_rot, self.encoders[arm_rot] + 200.0 - self.index_pulses[arm_rot])
 
     @remote
     def get_encoders(self):
@@ -604,21 +651,21 @@ class CanWorker(DeviceWorker):
     def ik(self, params): # execute given goal angles - send to motor drivers
         if len(params) == 4:
             outa, outb, outc, outd = [int((v % (2 * PI)) * 1800 / PI) for v in params]
-            self._bus.send(can.Message(arbitration_id=int(190),
+            self._bus.send(can.Message(arbitration_id=int(arm_lower),
                                         data=[8, (outa >> 8) & 0xff, outa & 0xff], extended_id=False))
-            self._bus.send(can.Message(arbitration_id=int(191),
+            self._bus.send(can.Message(arbitration_id=int(arm_upper),
                                         data=[8, (outb >> 8) & 0xff, outb & 0xff], extended_id=False))
-            self._bus.send(can.Message(arbitration_id=int(201),
+            self._bus.send(can.Message(arbitration_id=int(grip_lat),
                                         data=[8, (outc >> 8) & 0xff, outc & 0xff], extended_id=False))
-            self._bus.send(can.Message(arbitration_id=int(200),
+            self._bus.send(can.Message(arbitration_id=int(arm_rot),
                                         data=[8, (outd >> 8) & 0xff, outd & 0xff], extended_id=False))
         else: # without arm rotation
             outa, outb, outc = [int((v % (2 * PI)) * 1800 / PI) for v in params]
-            self._bus.send(can.Message(arbitration_id=int(190),
+            self._bus.send(can.Message(arbitration_id=int(arm_lower),
                                        data=[8, (outa >> 8) & 0xff, outa & 0xff], extended_id=False))
-            self._bus.send(can.Message(arbitration_id=int(191),
+            self._bus.send(can.Message(arbitration_id=int(arm_upper),
                                        data=[8, (outb >> 8) & 0xff, outb & 0xff], extended_id=False))
-            self._bus.send(can.Message(arbitration_id=int(201),
+            self._bus.send(can.Message(arbitration_id=int(grip_lat),
                                        data=[8, (outc >> 8) & 0xff, outc & 0xff], extended_id=False))
     @remote
     def ik_arm(self, params):
@@ -658,34 +705,21 @@ class CanWorker(DeviceWorker):
         with self.wheels_lock:
             if abs(self.throttle) + abs(self.turning) > 0.000001:
                 self.wheels_last_time_manual = clock()
-        left = self.throttle #+ self.turning / 2
-        right = self.throttle #- self.turning / 2
-        left /= 2
-        right /= 2
-        turn = -self.turning
-        #if self.throttle < 0:
-        #    turn = -turn
-        if left < -0.5:
-            left = -0.5
-        if left > 0.5:
-            left = 0.5
-        if right < -0.5:
-            right = -0.5
-        if right > 0.5:
-            right = 0.5
-        self.power(194, left)
-        self.power(197, right)
-        self.power(195, turn)
+        left = -self.throttle + self.turning
+        right = -self.throttle - self.turning
+
+        self.power(129, left)
+        self.power(130, right)
 
     @remote
     def axes(self):
         return [
                    ("wheels_left", 129),
                    ("wheels_right", 130),
-                   ("arm_rot", 200),
-                   ("arm_lower", 190),
-                   ("arm_upper", 191),
-                   ("grip_lat", 201),
+                   ("arm_rot", arm_rot),
+                   ("arm_lower", arm_lower),
+                   ("arm_upper", arm_upper),
+                   ("grip_lat", grip_lat),
                    ("grip_rot", 192),
                    ("grip_clamp", 193),
                    ("blinker", 210)
@@ -709,18 +743,15 @@ class CanWorker(DeviceWorker):
     def get_air_humidity(self):
         with self.lock_dht22:
             return round(self.air_humidity, 2)
+
+
     
 @include_remote_methods(CanWorker)
 class Can(DeviceOverZeroMQ):
-    """ Simple stub for the class to be accessed by the user """
-    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-
     def createDock(self, parentWidget, menu=None):
-        """ Function for integration in GUI app. Implementation below 
-        creates a button and a display """
         dock = QtWidgets.QDockWidget("Dummy device", parentWidget)
         widget = QtWidgets.QWidget(parentWidget)
         layout = QtWidgets.QHBoxLayout(parentWidget)
@@ -791,6 +822,15 @@ class Can(DeviceOverZeroMQ):
         self.button_pid.setCheckable(True)
         self.pid_locked = False
 
+        layout_position = QtWidgets.QVBoxLayout()
+        self.edit_position_x = QtWidgets.QLineEdit()
+        self.edit_position_x.setFixedWidth(90)
+        self.edit_position_y= QtWidgets.QLineEdit()
+        self.edit_position_y.setFixedWidth(90)
+        layout_position.addWidget(self.edit_position_x)
+        layout_position.addWidget(self.edit_position_y)
+        layout_position.addStretch(1)
+        layout.addLayout(layout_position)
         layout.addStretch(1)
 
         dock.setWidget(widget)
@@ -825,6 +865,8 @@ class Can(DeviceOverZeroMQ):
         self.edits[2].setText(str(round(status["terrain_slope"] / deg, 2)))
         self.battery_bar.setValue(status["battery"])
         self.battery_label.setText(str(status["battery"]) + '%\n' + str(round(status["voltage"], 2)) + ' V\n' + str(round(status["voltage"] / 6, 2)) + ' V\n')
+        self.edit_position_x.setText(str(round(status["position"][0], 2)))
+        self.edit_position_y.setText(str(round(status["position"][1], 2)))
 
         for i in range(4):
             self.editswheels[i].setText(str(status["wheels"][i]))

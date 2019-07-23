@@ -106,8 +106,6 @@ class JoystickControlWidget(QtWidgets.QWidget):
                 break
         except Exception as e:
             print(e)
-        if self.xbox == None:
-            raise NoRequiredDevicesError("No XBoxPad found")
 
         self.timer = QtCore.QTimer()
         self.timer.setSingleShot(5000)
@@ -185,7 +183,7 @@ class JoystickControlWidget(QtWidgets.QWidget):
 
     def _createWidgets(self):
         layout = QtWidgets.QGridLayout()
-        layout.setSpacing(4)
+        layout.setSpacing(2)
         self.setLayout(layout)
         self.masters = []
 

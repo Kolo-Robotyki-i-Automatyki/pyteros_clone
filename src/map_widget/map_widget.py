@@ -107,28 +107,8 @@ class ZoomableGraphicsView(QtWidgets.QGraphicsView):
         self.setTransform(old_transform)
 
 
-def _create_apt_poll(apt, name, serial):
-    """Creates a pair of a name and a function to get stage position """
-    func = lambda: apt.position(serial)
-    return ("APT %s, s/n: %d" % (name, serial), func)
-
-
-def _create_anc350_poll(anc350, name, axis):
-    """Creates a pair of a name and a function to get stage position """
-
-    def f():
-        return anc350.axisPos(axis)
-
-    return ("Attocube %s axis: %d" % (name, axis), f)
-
-
 def _create_can_poll(can, name, axis):
-    """Creates a pair of a name and a function to get stage position """
-
-    def f():
-        return can.get_position(axis)
-
-    return ("%s position: %d" % (name, axis), f)
+    return ("%s position: %d" % (name, axis), lambda axis=axis: can.get_position()[axis])
 
 
 
@@ -258,36 +238,12 @@ class MapWidget(QtWidgets.QWidget):
         self.slaves = []
 
         try:
-            from devices.thorlabs.apt import APT
-            for name, apt in {k: v for k, v in self.device_list.items() if isinstance(v, APT)}.items():
-                for serial in apt.devices():
-                    self.pools.append(_create_apt_poll(apt, name, serial))
-        except Exception as e:
-            print(e)
-
-        try:
-            from devices.attocube.anc350 import ANC350
-            for name, anc350 in {k: v for k, v in self.device_list.items() if isinstance(v, ANC350)}.items():
-                for axis in anc350.axes():
-                    self.pools.append(_create_anc350_poll(anc350, name, axis))
-        except Exception as e:
-            print(e)
-
-        try:
             from devices.can import Can
             for name, can in {k: v for k, v in self.device_list.items() if isinstance(v, Can)}.items():
                 self.pools.append(_create_can_poll(can, "x", 0))
                 self.pools.append(_create_can_poll(can, "y", 1))
         except Exception as e:
             print(e)
-
-        '''from ..can import Can
-            for devname, can in {k: v for k, v in self.device_list.items() if isinstance(v, Can)}.items():
-                for name, id in can.axes():
-                    description = name + "(" + str(id) + ")"
-                    self.slaves.append(Slave(can, description, id, step=False, method="power"))
-                self.slaves.append(Slave(can, "throttle", 0, step=False, method="drive"))
-                self.slaves.append(Slave(can, "turning right", 1, step=False, method="drive"))'''
 
         for direction, combo in self.combos.items():
             n = combo.currentIndex()
@@ -301,6 +257,7 @@ class MapWidget(QtWidgets.QWidget):
 
     def timeout(self):
         if self.active:
+            '''
             try:
                 for point in self.slopepoints:
                     self.scene.removeItem(point)
@@ -327,18 +284,14 @@ class MapWidget(QtWidgets.QWidget):
                 point.setY(p[1])
                 self.scene.addItem(point)
                 self.slopepoints.append(point)
+            
+            '''
 
             try:
                 tags = self.can.tags()
             except Exception:
                 tags = [None for i in range(15)]
                 print("error while loading tags list")
-
-            try:
-                pos = (self.can.get_position(0), self.can.get_position(1))
-            except Exception:
-                pos = (-1, -2)
-                print("error while loading tpositiont")
 
             try:
 
