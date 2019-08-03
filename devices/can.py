@@ -7,6 +7,7 @@ from collections import deque
 from devices.pid import PID
 #from devices.temphum import DHT22
 from devices.ik import axes_to_arm, axes_to_rover, arm_to_axes, arm_to_rover, rover_to_arm, rover_to_axes
+from devices.autonomy import Autonomy
 from scipy import optimize
 import subprocess
 import math
@@ -90,8 +91,7 @@ class CanWorker(DeviceWorker):
         self.soil_humidity = 0
         self.logfile = open("vlog.txt", "a");
         self.logc = 0
-        self.waypoints = []
-        self.waypoint = -1
+        self.autonomy = Autonomy()
 
     def init_device(self):
         self._bus = can.interface.Bus(bustype="socketcan", channel="can0", bitrate=250000)
@@ -121,13 +121,13 @@ class CanWorker(DeviceWorker):
         self.blink_thread = threading.Thread(target=self.loop_blink)
         self.blink_thread.start()
 
-        self.auto_thread = threading.Thread(target=self.loop_auto)
-        self.auto_thread.start()
         try:
             self.reach = Reach()
         except:
             self.reach = None
             print("No connection with reach.")
+        self.auto_thread = threading.Thread(target=self.loop_auto)
+        self.auto_thread.start()
 
         self.script_lock = threading.Lock()
         self.script_stop = 0
@@ -163,8 +163,7 @@ class CanWorker(DeviceWorker):
 
         d = super().status()
         d["connected"] = True
-        origin = self.waypoints[0] if len(self.waypoints) > 0 else relative_position_default_origin
-        d["position"] = self.get_position(origin)
+        d["position"] = self.get_position()
         d["coordinates"] = self.get_coordinates()
         with self.data_lock:
             d["heading"] = self.compass_heading
@@ -340,55 +339,26 @@ class CanWorker(DeviceWorker):
 
     def loop_auto(self):
         while True:
-            sleep(0.1)
             with self.auto_lock:
-                wp = self.waypoint
-            if wp != -1:
-                while wp < len(self.waypoints):
-                    self.drive_to(self.waypoints[wp])
-                    sleep(5)
-                    wp += 1
-                    if self.waypoint == -1:
-                        break
+                if not self.autonomy.is_running():
+                    sleep(0.5)
+                    continue
 
-    def drive_to(self, point):
-        while True:
-            if len(self.waypoints) > 0:
-                position = self.get_position(origin=self.waypoints[0])
-            else:
-                position = self.get_position()
+                position = self.get_coordinates()
+                heading = self.get_orientation()
 
-            with self.auto_lock:
-                angle = ( math.atan2(point[1] - position[1], (point[0] - position[0])) ) % (2 * PI)
-                distance = math.sqrt((point[1] - position[1]) ** 2 + (point[0] - position[0]) ** 2)
-            if distance < 2:
-                self.drive(1, 0)
-                self.drive(0, 0)
-                break
-            with self.data_lock:
-                heading = self.compass_heading
-            angle_difference = min(abs(heading - angle), 2 * PI - abs(heading - angle))
-
-            turning = math.sin(angle - heading)
-            print([position, point, heading, angle, distance, angle_difference, turning])
-            if angle_difference > PI/2:
-                if turning < 0:
-                    turning = -1
-                else:
-                    turning = 1
-            turning = max(min(turning * 2, 1), -1)
-
-            print(turning)
-            self.drive(1, turning)
-            self.drive(0, -0.4)
-            sleep(0.1)
-            if self.waypoint == -1:
-                break
+                throttle, turning = self.autonomy.step(position, orientation)
+                self.drive_both_axes(throttle, turning)
 
     @remote
     def start_auto_from_waypoint(self, waypoint = 0):
         with self.auto_lock:
-            self.waypoint = waypoint
+            self.autonomy.start(waypoint)
+
+    @remote
+    def end_auto(self):
+        with self.auto_lock:
+            self.autonomy.halt()
 
     @remote
     def get_coordinates(self):
@@ -418,13 +388,7 @@ class CanWorker(DeviceWorker):
     @remote
     def set_waypoints(self, waypoints):
         with self.auto_lock:
-            self.waypoints = waypoints
-
-    @remote
-    def get_waypoints(self):
-        with self.auto_lock:
-            waypoints = self.waypoints
-        return waypoints
+            self.autonomy.set_waypoints(waypoints)
 
     @remote
     def abort_script(self):
@@ -705,6 +669,11 @@ class CanWorker(DeviceWorker):
 
         self.power(129, left)
         self.power(130, right)
+
+    @remote
+    def drive_both_axes(self, throttle, turning):
+        self.drive(0, throttle)
+        self.drive(1, turning)
 
     @remote
     def axes(self):

@@ -153,7 +153,7 @@ if __name__ == '__main__':
 
         try:
             from src.path_widget import path_widget
-            widget = path_widget.PathCreator()
+            widget = path_widget.PathCreator(devices.active_devices)
             window.addPage(widget, "Autonomy")
         except Exception as e:
             traceback.print_exc(file=sys.stdout)

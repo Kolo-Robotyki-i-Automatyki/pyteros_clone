@@ -1,5 +1,6 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
 
+from devices.can import Can
 from devices.reach_tcp import Reach
 from devices.imu_get import Orientation
 
@@ -79,8 +80,10 @@ class PathCreator(QtWidgets.QWidget):
         # todo change this (?)
         self.rover = None
         try:
+            for name, dev in connected_devices.items():
+                print('device', name)
             for name, dev in {k: v for k, v in connected_devices.items() if isinstance(v, Can)}.items():
-                self.rover = rover
+                self.rover = dev
                 break
             else:
                 print('[autonomy] rover not connected')
@@ -106,6 +109,9 @@ class PathCreator(QtWidgets.QWidget):
 
         start_run_button = QtWidgets.QPushButton('Start')
         start_run_button.clicked.connect(self._start_run)
+
+        end_run_button = QtWidgets.QPushButton('Stop')
+        end_run_button.clicked.connect(self._end_run)
 
         panel_widget = QtWidgets.QWidget()
 
@@ -140,6 +146,8 @@ class PathCreator(QtWidgets.QWidget):
 
     def _redraw_map(self):
         self.map_widget.set_waypoints(self.points)
+        # if self.rover is not None:
+        #     self.last_position = self.rover.get_coordinates()
         self.map_widget.set_position(self.last_position)
         self.map_widget.repaint()
 
@@ -160,7 +168,7 @@ class PathCreator(QtWidgets.QWidget):
 
         self.last_position = self.rover.get_coordinates()
         latitude, longitude = self.last_position
-        self._add_waypoint(self, latitude, longitude)  
+        self._add_waypoint(latitude, longitude)  
 
     def _remove_waypoint(self):
         row = self.points_listwidget.currentRow()
@@ -177,3 +185,10 @@ class PathCreator(QtWidgets.QWidget):
 
         self.rover.set_waypoints(self.points)
         self.rover.start_auto_from_waypoint(0)
+
+    def _end_run(self):
+        if self.rover is None:
+            print("[autonomy] can't stop autonomous traversal; no connection to the rover")
+            return
+
+        self.rover.end_auto()
