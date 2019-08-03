@@ -347,7 +347,7 @@ class CanWorker(DeviceWorker):
                 position = self.get_coordinates()
                 heading = self.get_orientation()
 
-                throttle, turning = self.autonomy.step(position, orientation)
+                throttle, turning = self.autonomy.get_command(position, orientation)
                 self.drive_both_axes(throttle, turning)
 
     @remote

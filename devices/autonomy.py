@@ -1,4 +1,10 @@
-from devices.coord import *
+try:
+	from devices.coord import *
+except Exception as original_exception:
+	try:
+		from coord import *
+	except:
+		raise original_exception
 
 
 MIN_DESTINATION_DIST = 2.0
@@ -41,21 +47,99 @@ class Autonomy:
 		if dist <= MIN_DESTINATION_DIST:
 			self.next_waypoint += 1
 			if self.next_waypoint == len(self.waypoints):
-				self.is_running = False
+				self.running = False
 			return (0, 0)
 
-		heading_to_dist = math.atan2(y, x)
+		heading_to_dist = 90 - math.degrees(math.atan2(y, x))
+		while heading_to_dist < -180:
+			heading_to_dist += 360
+		while heading_to_dist > 180:
+			heading_to_dist -= 360
 
 		# TODO use a pid (?)
-		if heading_to_dist <= math.pi / 4
-			return (0.1, 1)
-		elif heading_to_dist >= math.pi / 4:
+		if heading_to_dist <= -45:
 			return (0.1, -1)
+		elif heading_to_dist >= 45:
+			return (0.1, 1)
 		else:
-			turning = -(heading_to_dist / (math.pi / 4))
+			turning = (heading_to_dist / 45)
 			return (0.4, turning)
 
 
+def main():
+	import cv2
+	import numpy as np
+
+	import time
+
+
+	IMG_WIDTH = 800
+	ORIGIN = (53.015963, 18.589058)
+	LAT_RANGE = 0.0015
+	LON_RANGE = 0.0025
+
+	POS_RATE = 30.0
+	HEADING_RATE = 80.0
+
+
+	pos = ORIGIN
+	heading = 213.0
+
+	waypoints = [
+		(53.0165, 18.589058),
+		(53.0160, 18.590),
+		(53.0155, 18.588),
+		(53.0160, 18.589)
+	]
+
+	a = Autonomy()
+	a.set_waypoints(waypoints)
+	a.start()
+
+	def to_xy(pos):
+		lat, lon = pos
+		x = ((lon - ORIGIN[1]) / LON_RANGE) + 0.5
+		y = ((lat - ORIGIN[0]) / LAT_RANGE) + 0.5
+		x_pix = IMG_WIDTH * x
+		y_pix = IMG_WIDTH * (1 - y)
+		return x_pix, y_pix
+
+	t = time.time()
+	while True:
+		nt = time.time()
+		dt = nt - t
+		t = nt
+
+		# simulation
+		print('position: {:2.8f}° {:2.8f}°'.format(*pos))
+		print('heading:  {:3.2f}°'.format(heading))
+
+		throttle, turning = a.get_command(pos, heading)
+
+		heading += dt * HEADING_RATE * turning
+		if heading < 0:
+			heading += 360
+		if heading > 360:
+			heading -= 360
+
+		dist = dt * POS_RATE * throttle
+		phi = math.radians(90 - heading)
+		dx, dy = dist * math.cos(phi), dist * math.sin(phi)
+		pos = move(pos, (dx, dy))
+
+		# visualization
+		img = np.zeros((IMG_WIDTH, IMG_WIDTH, 3), dtype=np.uint8)
+		for p in waypoints:
+			x, y = to_xy(p)
+			cv2.circle(img, (round(x), round(y)), 5, (255, 255, 0), -1)
+
+		px, py = to_xy(pos)
+		cv2.circle(img, (round(px), round(py)), 7, (0, 255, 255), -1)
+
+		cv2.imshow('simulation', img)
+		if cv2.waitKey(1) == 27:
+			break
+
+
 if __name__ == '__main__':
-	# TODO run simple simulation
-	pass
+	main()

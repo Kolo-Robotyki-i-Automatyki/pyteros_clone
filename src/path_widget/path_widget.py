@@ -128,7 +128,7 @@ class PathCreator(QtWidgets.QWidget):
         panel_widget.layout().addRow(remove_button)
         panel_widget.layout().addRow(self.points_listwidget)
 
-        panel_widget.layout().addRow(start_run_button)
+        panel_widget.layout().addRow(start_run_button, end_run_button)
 
         self.layout().addWidget(panel_widget)
 
@@ -157,8 +157,8 @@ class PathCreator(QtWidgets.QWidget):
         self.points_listwidget.addItem('{:.6f}, {:.6f}'.format(latitude, longitude))
 
     def _add_waypoint_input(self):
-        latitude = float(self.latitude_input.text())
-        longitude = float(self.longitude_input.text())
+        latitude = float(self.latitude_input.text().replace(',', '.'))
+        longitude = float(self.longitude_input.text().replace(',', '.'))
         self._add_waypoint(latitude, longitude)
 
     def _add_waypoint_current_location(self):
