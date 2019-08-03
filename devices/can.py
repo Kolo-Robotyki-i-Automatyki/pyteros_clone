@@ -656,16 +656,19 @@ class CanWorker(DeviceWorker):
     @remote
     def drive(self, axis, power):
         print("drive")
-        if axis == 0: #throttle
+        if axis == 0:  # throttle
             self.throttle = power
-        if axis == 1: #turning
+        if axis == 1:  # turning
             self.turning = power
 
         with self.wheels_lock:
             if abs(self.throttle) + abs(self.turning) > 0.000001:
                 self.wheels_last_time_manual = clock()
-        left = -self.throttle + self.turning
-        right = -self.throttle - self.turning
+        left = self.throttle + self.turning
+        right = -self.throttle + self.turning
+
+        self.power(129, left)
+        self.power(130, right)
 
         self.power(129, left)
         self.power(130, right)
