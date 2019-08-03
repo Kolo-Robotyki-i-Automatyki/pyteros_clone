@@ -48,7 +48,7 @@ arm_lower = 190
 arm_upper = 191
 arm_rot = 200
 grip_lat = 201
-relative_position_origin = (52.211415, 20.983336)
+relative_position_default_origin = (52.211415, 20.983336)
 
 def list_to_int(bytes):
     return int.from_bytes(bytearray(bytes), byteorder='big', signed=True)
@@ -163,7 +163,8 @@ class CanWorker(DeviceWorker):
 
         d = super().status()
         d["connected"] = True
-        d["position"] = self.get_position()
+        origin = self.waypoints[0] if len(self.waypoints) > 0 else relative_position_default_origin
+        d["position"] = self.get_position(origin)
         d["coordinates"] = self.get_coordinates()
         with self.data_lock:
             d["heading"] = self.compass_heading
@@ -352,7 +353,11 @@ class CanWorker(DeviceWorker):
 
     def drive_to(self, point):
         while True:
-            position = self.get_position()
+            if len(self.waypoints) > 0:
+                position = self.get_position(origin=self.waypoints[0])
+            else:
+                position = self.get_position()
+
             with self.auto_lock:
                 angle = ( math.atan2(point[1] - position[1], (point[0] - position[0])) ) % (2 * PI)
                 distance = math.sqrt((point[1] - position[1]) ** 2 + (point[0] - position[0]) ** 2)
@@ -399,10 +404,10 @@ class CanWorker(DeviceWorker):
         return o
 
     @remote
-    def get_position(self, axis=-1):
+    def get_position(self, origin=relative_position_default_origin, axis=-1):
         coords = self.get_coordinates()
-        x = (coords[1] - relative_position_origin[1]) * deg * 6371000 * math.cos(coords[0] * deg)
-        y = (coords[0] - relative_position_origin[0]) * deg * 6371000
+        x = (coords[1] - origin[1]) * deg * 6371000 * math.cos(coords[0] * deg)
+        y = (coords[0] - origin[0]) * deg * 6371000
         if axis == 0:
             return x
         elif axis == 1:
@@ -420,16 +425,6 @@ class CanWorker(DeviceWorker):
         with self.auto_lock:
             waypoints = self.waypoints
         return waypoints
-
-    @remote
-    def add_waypoint(self, position):
-        with self.auto_lock:
-            self.waypoints.append(position)
-
-    @remote
-    def add_waypoint_from_current_position(self):
-        position = self.get_position()
-        self.add_waypoint(position)
 
     @remote
     def abort_script(self):
