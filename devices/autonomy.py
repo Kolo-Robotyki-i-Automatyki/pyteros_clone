@@ -20,6 +20,10 @@ class Autonomy:
 		self.waypoints = waypoints
 
 	def start(self, starting_waypoint = 0):
+		if starting_waypoint < 0:
+			self.running = False
+			return
+
 		self.running = True
 		self.next_waypoint = starting_waypoint
 
@@ -36,6 +40,10 @@ class Autonomy:
 		if not self.is_running():
 			return (0, 0)
 
+		if self.next_waypoint >= len(self.waypoints):
+			self.halt()
+			return (0.0)
+
 		next_waypoint = self.waypoints[self.next_waypoint]
 		x, y = relative_xy(origin=position, destination=next_waypoint)
 		x, y = (
@@ -47,7 +55,7 @@ class Autonomy:
 		if dist <= MIN_DESTINATION_DIST:
 			self.next_waypoint += 1
 			if self.next_waypoint == len(self.waypoints):
-				self.running = False
+				self.halt()
 			return (0, 0)
 
 		heading_to_dist = 90 - math.degrees(math.atan2(y, x))

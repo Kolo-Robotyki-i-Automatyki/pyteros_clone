@@ -338,27 +338,36 @@ class CanWorker(DeviceWorker):
         self.blink = on
 
     def loop_auto(self):
-        while True:
-            with self.auto_lock:
+        try:
+            while True:            
                 if not self.autonomy.is_running():
                     sleep(0.5)
                     continue
-
+                
                 position = self.get_coordinates()
                 heading = self.get_orientation()
 
-                throttle, turning = self.autonomy.get_command(position, orientation)
-                self.drive_both_axes(throttle, turning)
+                with self.auto_lock:
+                    throttle, turning = self.autonomy.get_command(position, orientation)
+                    self.drive_both_axes(throttle, turning)
+        except Exception as e:
+            print('loop_auto()', str(e))
 
     @remote
     def start_auto_from_waypoint(self, waypoint = 0):
-        with self.auto_lock:
-            self.autonomy.start(waypoint)
+        try:
+            with self.auto_lock:
+                self.autonomy.start(waypoint)
+        except Exception as e:
+            print('start_auto_from_waypoint()', str(e))
 
     @remote
     def end_auto(self):
-        with self.auto_lock:
-            self.autonomy.halt()
+        try:
+            with self.auto_lock:
+                self.autonomy.halt()
+        except Exception as e:
+            print('end_auto()', str(e))
 
     @remote
     def get_coordinates(self):
@@ -387,8 +396,11 @@ class CanWorker(DeviceWorker):
 
     @remote
     def set_waypoints(self, waypoints):
-        with self.auto_lock:
-            self.autonomy.set_waypoints(waypoints)
+        try:
+            with self.auto_lock:
+                self.autonomy.set_waypoints(waypoints)
+        except Exception as e:
+            print('set_waypoints()', str(e))
 
     @remote
     def abort_script(self):

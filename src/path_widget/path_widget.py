@@ -80,8 +80,6 @@ class PathCreator(QtWidgets.QWidget):
         # todo change this (?)
         self.rover = None
         try:
-            for name, dev in connected_devices.items():
-                print('device', name)
             for name, dev in {k: v for k, v in connected_devices.items() if isinstance(v, Can)}.items():
                 self.rover = dev
                 break
