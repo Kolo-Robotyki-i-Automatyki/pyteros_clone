@@ -95,6 +95,8 @@ class PathCreator(QtWidgets.QWidget):
         self.longitude_input = QtWidgets.QLineEdit('0')
         self.longitude_input.setValidator(QtGui.QDoubleValidator())
 
+        self.status_label = QtWidgets.QLabel('')
+
         self.points = []
 
         self.points_listwidget = QtWidgets.QListWidget()
@@ -118,6 +120,8 @@ class PathCreator(QtWidgets.QWidget):
         # side panel
         panel_widget.setLayout(QtWidgets.QFormLayout())
         panel_widget.setMaximumWidth(250)
+
+        panel_widget.layout().addRow(self.status_label)
 
         panel_widget.layout().addRow(QtWidgets.QLabel('latitude:'), self.latitude_input)
         panel_widget.layout().addRow(QtWidgets.QLabel('longitude:'), self.longitude_input)
@@ -143,6 +147,8 @@ class PathCreator(QtWidgets.QWidget):
         self.map_redraw_timer.start()
 
     def _redraw_map(self):
+        self.status_label.setText(self.rover.get_auto_status())
+
         self.map_widget.set_waypoints(self.points)
         # if self.rover is not None:
         #     self.last_position = self.rover.get_coordinates()

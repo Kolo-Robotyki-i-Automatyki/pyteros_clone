@@ -348,7 +348,7 @@ class CanWorker(DeviceWorker):
                 heading = self.get_orientation()
 
                 with self.auto_lock:
-                    throttle, turning = self.autonomy.get_command(position, orientation)
+                    throttle, turning = self.autonomy.get_command(position, heading)
                     self.drive_both_axes(throttle, turning)
         except Exception as e:
             print('loop_auto()', str(e))
@@ -368,6 +368,15 @@ class CanWorker(DeviceWorker):
                 self.autonomy.halt()
         except Exception as e:
             print('end_auto()', str(e))
+
+    @remote
+    def get_auto_status(self):
+        try:
+            with self.auto_lock:
+                return self.autonomy.get_status()
+        except Exception as e:
+            print('get_auto_status()', str(e))
+            return '<exception occured>'
 
     @remote
     def get_coordinates(self):

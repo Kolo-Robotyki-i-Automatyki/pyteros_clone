@@ -7,7 +7,7 @@ except Exception as original_exception:
 		raise original_exception
 
 
-MIN_DESTINATION_DIST = 2.0
+MIN_DESTINATION_DIST = 0.5
 
 
 class Autonomy:
@@ -33,29 +33,41 @@ class Autonomy:
 	def is_running(self):
 		return self.running
 
+	def get_status(self):
+		str_running = 'in progress' if self.running else 'idle'
+		str_progress = '{} out of {}'.format(
+			self.next_waypoint,
+			len(self.waypoints)
+		)
+		return '{}; {}'.format(str_running, str_progress)
+
 	def get_command(self, position, heading):
 		'''
+		Input: position as (latitude, longitude), heading in radians
 		Returns pair (throttle, turning speed)
 		'''
 		if not self.is_running():
+			print('[auto] not running!')
 			return (0, 0)
 
 		if self.next_waypoint >= len(self.waypoints):
 			self.halt()
+			print('[auto] next_waypoints >= len(waypoints)')
 			return (0.0)
 
 		next_waypoint = self.waypoints[self.next_waypoint]
 		x, y = relative_xy(origin=position, destination=next_waypoint)
 		x, y = (
-			x * math.cos(math.radians(heading)) - y * math.sin(math.radians(heading)),
-			x * math.sin(math.radians(heading)) + y * math.cos(math.radians(heading))
+			x * math.cos(heading) - y * math.sin(heading),
+			x * math.sin(heading) + y * math.cos(heading)
 		)
 
 		dist = math.sqrt(x * x + y * y)
 		if dist <= MIN_DESTINATION_DIST:
 			self.next_waypoint += 1
-			if self.next_waypoint == len(self.waypoints):
+			if self.next_waypoint >= len(self.waypoints):
 				self.halt()
+			print('[auto] reached the next waypoint')
 			return (0, 0)
 
 		heading_to_dist = 90 - math.degrees(math.atan2(y, x))
@@ -66,11 +78,11 @@ class Autonomy:
 
 		# TODO use a pid (?)
 		if heading_to_dist <= -45:
-			return (0.1, -1)
+			return (0.0, -0.3)
 		elif heading_to_dist >= 45:
-			return (0.1, 1)
+			return (0.0, 0.3)
 		else:
-			turning = (heading_to_dist / 45)
+			turning = 0.3 * (heading_to_dist / 45)
 			return (0.4, turning)
 
 
