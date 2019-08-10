@@ -188,6 +188,8 @@ class CanWorker(DeviceWorker):
                 i = s - 180 * 4
 
             d['battery'] = lipo_characteristics[i]
+        with self.auto_lock:
+            d['autonomy'] = self.autonomy.get_status()
 
         self.logfile.write("%f\t%f\n" % (time(), sum(self.battery_v) / 40.0))
         self.logc += 1
@@ -738,6 +740,7 @@ class CanWorker(DeviceWorker):
 class Can(DeviceOverZeroMQ):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.last_status = {}
 
     def createDock(self, parentWidget, menu=None):
         dock = QtWidgets.QDockWidget("Dummy device", parentWidget)
@@ -843,6 +846,8 @@ class Can(DeviceOverZeroMQ):
 
         
     def updateSlot(self, status):
+        self.last_status = status
+
         self.edits_sensors[0].setText(str(round(status["air_temperature"], 2)))
         self.edits_sensors[1].setText(str(round(status["air_humidity"], 2)))
         self.edits_sensors[2].setText(str(round(status["air_co2"], 2)))
@@ -870,6 +875,9 @@ class Can(DeviceOverZeroMQ):
         print(self.edits[0].text())
         print(self.edits[1].text())
         self.power(self.edits[0].text(), self.edits[1].text())
+
+    def get_last_status(self):
+        return self.last_status
 
     #def get_position(self, axis):
     #    #with self.data_lock:

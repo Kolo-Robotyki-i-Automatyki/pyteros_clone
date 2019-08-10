@@ -127,7 +127,7 @@ if __name__ == '__main__':
             traceback.print_exc(file=sys.stdout)'''
             
         try:
-            from src.map_widget import map_widget
+            from src.map_widget_new import map_widget
             w = map_widget.MapWidget(devices.active_devices)
             window.addPage(w, "Map")
         except NoRequiredDevicesError:

@@ -8,7 +8,7 @@ from enum import Enum
 from numpy import nan
 import yaml
 
-from settings import Settings
+from src.common.settings import Settings
 
 
 class Device:

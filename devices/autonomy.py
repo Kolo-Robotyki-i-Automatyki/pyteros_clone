@@ -1,10 +1,4 @@
-try:
-	from devices.coord import *
-except Exception as original_exception:
-	try:
-		from coord import *
-	except:
-		raise original_exception
+from src.common.coord import *
 
 
 MIN_DESTINATION_DIST = 0.5

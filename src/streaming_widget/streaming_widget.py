@@ -8,7 +8,7 @@ from typing import List
 import subprocess
 
 from devices.cameras import CameraServer
-from settings import Settings
+from src.common.settings import Settings
 import time
 
 
