@@ -6,7 +6,10 @@ of Ultrafast MagnetoSpectroscopy at Faculty of Physics, University of Warsaw
 '''
 from enum import Enum
 from numpy import nan
-import configparser
+import yaml
+
+from settings import Settings
+
 
 class Device:
     """ A prototype of a class representing a single device, 
@@ -56,88 +59,93 @@ import importlib
 import sys,traceback
 
 
+""" Enabled devices """
+dev_launch_settings = Settings('devices')
 
 
-def load_devices(use_gui=False, parent=None, file='devices.ini'):
-    config = configparser.ConfigParser()
-    config.read(file)
-    sections = [config[name] for name in config.sections()]
-    for section in sections:
-        try:
-            if section['enabled'].lower() in ['true', '1', 't', 'y', 'yes']:
-                section.enabled = True
-            else:
-                section.enabled = False
-        except:
-            section.enabled = True
-           
+def load_devices(use_gui=False, parent=None, file='devices.yaml'):
+    with open(file, 'r') as config_file:
+        config = yaml.load(config_file, Loader=yaml.SafeLoader)
+   
     if use_gui:
         from PyQt5 import QtWidgets
+
         dialog = QtWidgets.QDialog(parent)
         dialog.setWindowTitle("Select devices")
         layout = QtWidgets.QVBoxLayout()
         dialog.setLayout(layout)
-        for section in sections:
-            checkbox = QtWidgets.QCheckBox(section.name)
-            checkbox.setChecked(section.enabled)
-            section.checkbox = checkbox
+
+        checkboxes = {}
+
+        for dev, dev_conf in config.items():
+            checkbox = QtWidgets.QCheckBox(dev_conf['name'])
+            enabled = dev_launch_settings.get(dev, False)
+            checkbox.setChecked(enabled)
+            checkboxes[dev] = checkbox
             layout.addWidget(checkbox)
+
         buttonbox = QtWidgets.QDialogButtonBox()
         buttonbox.addButton("Start", QtWidgets.QDialogButtonBox.AcceptRole)
         buttonbox.accepted.connect(dialog.accept)
         layout.addWidget(buttonbox)
-        result = dialog.exec_()
-        changed = False
-        for section in sections:
-            oldstate = section.enabled
-            section.enabled = section.checkbox.isChecked()
-            if oldstate ^ section.enabled:
-                changed = True
-            section['enabled'] = str(section.enabled).lower()
-        if changed:
-            with open(file, 'w') as configfile:
-                config.write(configfile)
+        
+        _ = dialog.exec_()
+        for dev in config.keys():
+            enabled = checkboxes[dev].isChecked()
+            dev_launch_settings.set(dev, enabled, save=False)
+        dev_launch_settings.save()
     
-    for section in config.sections():
-        try:
-            items = dict(config.items(section))
-            if 'enabled' in items:
-                if items['enabled'].lower() in ['true', '1', 't', 'y', 'yes']:
-                    del(items['enabled'])
-                else:
-                    continue
-            module_name, class_name = items['class'].rsplit(".", 1)
-            kwargs = items.copy()
-            kwargs.pop('class')
-            DeviceClass = getattr(importlib.import_module('devices.'+module_name), class_name)
-            instance = DeviceClass(**kwargs)
-            active_devices[section] = instance
-        except Exception as e:
-            print("Loading device %s failed." % section)
-            traceback.print_exc(file=sys.stdout)
+    for dev, dev_conf in config.items():
+        if dev_launch_settings.get(dev, False):
+            try:
+                host = dev_conf['host']
+                req = dev_conf['req_port']
+                pub = dev_conf['pub_port']
+
+                kwargs = {
+                    'host': host,
+                    'req_port': req,
+                    'pub_port': pub,
+                }
+
+                module_name, class_name = dev_conf['client_class'].rsplit('.', 1)
+                DeviceClass = getattr(importlib.import_module('devices.'+module_name), class_name)
+                instance = DeviceClass(**kwargs)
+
+                active_devices[dev] = instance
+            except Exception as e:
+                print("Loading device {} failed.".format(dev))
+                traceback.print_exc(file=sys.stdout)
 
 
-def load_workers(file='local_devices.ini'):
-    config = configparser.ConfigParser()
-    config.read(file)
+def load_workers(file='devices.yaml', hostname='localhost'):
+    with open(file, 'r') as config_file:
+        config = yaml.load(config_file, Loader=yaml.SafeLoader)
+   
     workers = []
-    for section in config.sections():
+
+    for dev, dev_conf in config.items():
         try:
-            items = dict(config.items(section))
-            if 'enabled' in items:
-                if items['enabled'].lower() in ['true', '1', 't', 'y', 'yes']:
-                    del(items['enabled'])
-                else:
-                    continue
-            module_name, class_name = items['class'].rsplit(".", 1)
-            name = items['name']
-            kwargs = items.copy()
-            kwargs.pop('class')
-            kwargs.pop('name')
+            if dev_conf['host'] != hostname:
+                continue
+
+            name = dev_conf['name']
+            host = dev_conf['host']
+            req = dev_conf['req_port']
+            pub = dev_conf['pub_port']
+
+            kwargs = {
+                'req_port': req,
+                'pub_port': pub,
+            }
+            kwargs.update(dev_conf.get('params', {}))
+            
+            module_name, class_name = dev_conf['worker_class'].rsplit('.', 1)
             DeviceClass = getattr(importlib.import_module('devices.'+module_name), class_name)
-            workers.append( (name, DeviceClass, kwargs) )
+            
+            workers.append((name, DeviceClass, kwargs))
         except Exception as e:
-            print("Loading device %s failed." % section)
+            print("Loading device {} failed.".format(dev))
             traceback.print_exc(file=sys.stdout)
+
     return workers
-                        

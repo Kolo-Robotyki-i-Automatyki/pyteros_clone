@@ -12,8 +12,8 @@ from PyQt5 import Qt,QtCore
 import time
 import zmq
 import devices
+import socket
 import sys,traceback
-
 
 
 class ZMQ_Listener(QtCore.QObject):
@@ -96,7 +96,7 @@ class MainWindow(QtCore.QObject):
         self.createTabs()
 
     def createTabs(self):
-        workers_desc = devices.load_workers("local_devices_headless.ini")
+        workers_desc = devices.load_workers(hostname=socket.gethostname())
         self.processes = []
         for name,cls,kwargs in workers_desc:
             try:

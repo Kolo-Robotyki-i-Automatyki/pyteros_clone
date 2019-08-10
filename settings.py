@@ -26,10 +26,14 @@ class Settings:
 				print(e)
 				self.cache = {}
 
-	def set(self, key, val):
-		self.cache[key] = val
+	def save(self):		
 		with open(self.filename, 'w') as f:
 			json.dump(self.cache, f)
+
+	def set(self, key, val, save=True):
+		self.cache[key] = val
+		if save:
+			self.save()
 
 	def get(self, key, default=None):
 		return self.cache.get(key, default)

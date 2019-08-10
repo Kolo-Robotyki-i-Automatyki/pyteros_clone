@@ -1,0 +1,47 @@
+motors:
+  name: Can
+  host: yellow
+  req_port: 10200
+  pub_port: 10201
+  client_class: can.Can
+  worker_class: can.CanWorker
+
+xbox1:
+  name: XBox1
+  host: localhost
+  req_port: 7004
+  pub_port: 7005
+  client_class: misc.xbox.XBoxPad
+  worker_class: misc.xbox.XBoxWorker
+  params:
+    id: 0
+
+xbox2:
+  name: XBox2
+  host: localhost
+  req_port: 7014
+  pub_port: 7015
+  client_class: misc.xbox.XBoxPad
+  worker_class: misc.xbox.XBoxWorker
+  params:
+    id: 1
+
+camera1:
+  name: CameraPink
+  host: pink
+  req_port: 8501
+  pub_port: 8502
+  client_class: cameras.CameraServer
+  worker_class: cameras.CameraServerWorker
+  params:
+    refresh_rate: 1.0
+
+camera2:
+  name: CameraBlue
+  host: blue
+  req_port: 8511
+  pub_port: 8512
+  client_class: cameras.CameraServer
+  worker_class: cameras.CameraServerWorker
+  params:
+    refresh_rate: 1.0
