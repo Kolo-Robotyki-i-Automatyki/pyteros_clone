@@ -1,7 +1,7 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, \
-    QLabel, QCheckBox, QPushButton, QLineEdit
-from PyQt5.QtCore import pyqtSignal, QThread
+    QLabel, QCheckBox, QPushButton, QLineEdit, QApplication
+from PyQt5.QtCore import pyqtSignal, pyqtSlot, QThread, QObject, QTimer
 
 import threading
 from typing import List
@@ -9,6 +9,7 @@ import subprocess
 
 from devices.cameras import CameraServer
 from settings import Settings
+import time
 
 
 video_transforms = [
@@ -21,7 +22,43 @@ video_transforms = [
 ]
 
 
+class CommandRunner(QObject):
+    finished = pyqtSignal()
+
+    def __init__(self, cmd):
+        super().__init__()
+        self.should_exit = False
+        self.cmd = cmd
+
+    @pyqtSlot()
+    def run(self):
+        process = subprocess.Popen(self.cmd.split(), shell=False)
+
+        while True:
+            time.sleep(0.2)
+            QApplication.instance().processEvents()
+
+            if process.poll() is not None:
+                break
+            if self.should_exit:
+                break
+
+        try:
+            process.kill()
+        except:
+            pass
+
+        self.finished.emit()
+        QThread.currentThread().exit()
+
+    @pyqtSlot()
+    def close(self):
+        self.should_exit = True
+
+
 class CameraControl(QWidget):
+    close_viewer = pyqtSignal()
+
     def __init__(self, dev_name: str, server_name: str, modes : List,
             host: str, port: int, server, parent=None):
         super().__init__(parent)
@@ -38,6 +75,7 @@ class CameraControl(QWidget):
         self.mode_idx = 0
 
         self.viewer = None
+        self.viewer_thread = None
         self.window_open = False
 
 
@@ -86,6 +124,13 @@ class CameraControl(QWidget):
             self.button_start_stop
         ])
 
+
+        self.server_update_timer = QTimer()
+        self.server_update_timer.setInterval(1000)
+        self.server_update_timer.setSingleShot(False)
+        self.server_update_timer.timeout.connect(self._apply_server_update)
+        self.server_update_timer.start()
+
     def is_recording(self):
         return self.checkbox_record.isChecked()
 
@@ -128,39 +173,48 @@ class CameraControl(QWidget):
         if not self.is_recording() and not self.is_streaming():
             self.capture_on = False
 
+        if not self.capture_on:
+            self.close_viewer.emit()
+
         self._update_ui()
 
         self._set_camera_status()
 
     def _set_camera_status(self):
-        try:
-            if self.capture_on:
-                fmt, width, height, fps = self.modes[self.mode_idx]
-                self.server.set_camera_status(
-                    dev_name=self.dev_name,
-                    is_recording=self.is_recording(),
-                    is_streaming=self.is_streaming(),
-                    fmt=fmt,
-                    width=width,
-                    height=height,
-                    framerate=fps,
-                    host=self.host,
-                    port=self.port
-                )
-                if self.is_streaming():
-                    self._open_window()
-            else:
-                self.server.set_camera_status(
-                    dev_name=self.dev_name,
-                    is_recording=False,
-                    is_streaming=False
-                )
-        except Exception as e:
-            print(e)
+        is_streaming = self.is_streaming()
+        is_recording = self.is_recording()
+
+        def worker():
+            try:
+                if self.capture_on:
+                    fmt, width, height, fps = self.modes[self.mode_idx]
+                    self.server.set_camera_status(
+                        dev_name=self.dev_name,
+                        is_recording=is_recording,
+                        is_streaming=is_streaming,
+                        fmt=fmt,
+                        width=width,
+                        height=height,
+                        framerate=fps,
+                        host=self.host,
+                        port=self.port
+                    )
+                    if is_streaming:
+                        self._open_window()
+                else:
+                    self.server.set_camera_status(
+                        dev_name=self.dev_name,
+                        is_recording=False,
+                        is_streaming=False
+                    )
+            except Exception as e:
+                print(e)
+
+        threading.Thread(target=worker).run()
 
     def _close_window(self):
         try:
-            self.viewer.kill()
+            self.close_viewer.emit()
         except:
             pass
 
@@ -194,7 +248,31 @@ class CameraControl(QWidget):
         cmd = ' ! '.join(pipeline)
         print('[streaming] cmd = "{}"'.format(cmd))
 
-        self.viewer = subprocess.Popen(cmd.split(), shell=False)
+        self.viewer = CommandRunner(cmd)
+        self.viewer_thread = QThread()
+        self.viewer.moveToThread(self.viewer_thread)
+        self.viewer.finished.connect(self._force_stop_capture)
+        self.close_viewer.connect(self.viewer.close)
+        self.viewer_thread.started.connect(self.viewer.run)
+        self.viewer_thread.start()
+
+    def _force_stop_capture(self):
+        if self.viewer is not None:
+            self.viewer = None
+        if self.viewer_thread is not None:
+            self.viewer_thread.wait()
+            self.viewer_thread = None
+
+        self.capture_on = False
+        self._update_ui()
+        self._set_camera_status()
+
+    def _apply_server_update(self):
+        server_status = self.server.get_status()
+        if self.dev_name not in server_status:
+            return
+
+        status = server_status[self.dev_name]
 
 
 class SettingsPanel(QWidget):
@@ -215,20 +293,16 @@ class SettingsPanel(QWidget):
         self.updated_host.emit(host)
 
 
-class DeviceLoader(QThread):
+class DeviceLoader(QObject):
     finished = pyqtSignal(list)
 
     def __init__(self, servers, parent=None):
         super().__init__(parent)
         self.servers = servers
 
-    def __del__(self):
-        self.wait()
-
-    def run(self):
+    @pyqtSlot()
+    def load_devices(self):
         all_devices = []
-
-        # print('detecting devices...')
 
         next_port = 16389
         for server in self.servers:
@@ -245,8 +319,6 @@ class DeviceLoader(QThread):
                     next_port += 1
             except Exception as e:
                 print(e)
-
-        # print('done!')
 
         self.finished.emit(all_devices)
 
@@ -274,7 +346,6 @@ class StreamingWidget(QWidget):
         settings_panel.updated_host.connect(self._update_host)
         main_layout.addWidget(settings_panel)
 
-        # TODO this doesn't run in paralell as intended, fix it!
         self.camera_widgets_container = QWidget()
         self.camera_widgets_container.setLayout(QVBoxLayout())
         main_layout.addWidget(self.camera_widgets_container)
@@ -282,12 +353,14 @@ class StreamingWidget(QWidget):
         main_layout.addStretch()
 
 
-        loader = DeviceLoader(self.camera_servers)
-        loader.finished.connect(self._add_devices_from_list)
-        loader.start()
+        self.loader = DeviceLoader(self.camera_servers)
+        self.loader_thread = QThread()
+        self.loader.moveToThread(self.loader_thread)
+        self.loader.finished.connect(self._add_devices_from_list)
+        self.loader_thread.started.connect(self.loader.load_devices)
+        self.loader_thread.start()
 
-        self._add_device('chuj', 'ehhh', [('fake', 12, 34, 'lol')], '127.0.0.1', 9999, None)
-
+    @pyqtSlot(list)
     def _add_devices_from_list(self, devices):
         for dev_name, modes, port, server in devices:
             try:

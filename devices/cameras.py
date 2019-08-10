@@ -56,7 +56,7 @@ class CameraServerWorker(DeviceWorker):
 
 		self._discover_devices()
 
-		subprocess.run(['pkill', 'gst-launch-1.0'], shell=True)
+		subprocess.run(['pkill', '"gst-launch"'], shell=False)
 
 	def status(self):
 		with self.lock:
@@ -289,16 +289,7 @@ class CameraServer(DeviceOverZeroMQ):
 		self.status_callback = None
 
 	def createDock(self, parentWidget, menu=None):
-		pass
-
-	def updateSlot(self, status):
-		with self.lock:
-			self.last_status = status
-
-		try:	
-			self.status_callback(status)
-		except:
-			pass
+		self.createListenerThread(self._update_slot)
 
 	def set_status_callback(self, callback):
 		with self.lock:
@@ -307,3 +298,12 @@ class CameraServer(DeviceOverZeroMQ):
 	def get_status(self):
 		with self.lock:
 			return self.last_status
+
+	def _update_slot(self, status):
+		with self.lock:
+			self.last_status = status
+
+		try:	
+			self.status_callback(status)
+		except:
+			pass
