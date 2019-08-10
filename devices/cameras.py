@@ -199,10 +199,6 @@ class CameraServerWorker(DeviceWorker):
 			if line[0].isspace():
 				devices.append(line.strip())
 
-		print('full list of video devices:')
-		for dev_name in devices:
-			print('\t', dev_name)
-
 		for dev_name in devices:
 			all_formats = []
 
@@ -211,8 +207,6 @@ class CameraServerWorker(DeviceWorker):
 
 			lines = list_formats_process.stdout.decode('utf-8').split('\n')
 			lines = [line.strip() for line in lines if len(line.strip()) > 0]
-
-			print('parsing', dev_name)
 
 			i = 0
 			while i < len(lines):
@@ -224,8 +218,6 @@ class CameraServerWorker(DeviceWorker):
 				else:
 					i += 1
 					continue
-
-				print('inspect', pixel_format)
 
 				while i < len(lines) and RE_SIZE.match(lines[i]) is None:
 					i += 1
@@ -263,13 +255,7 @@ class CameraServerWorker(DeviceWorker):
 					else:
 						continue
 
-					print(width, height, fps_str)
-
 					all_formats.append((pixel_format, width, height, fps_str))
-
-			print('all formats:')
-			for f in all_formats:
-				print('\t', f)
 
 			if len(all_formats) > 0:
 				with self.lock:

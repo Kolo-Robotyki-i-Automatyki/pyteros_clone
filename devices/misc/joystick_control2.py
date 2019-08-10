@@ -140,8 +140,8 @@ class JoystickControlWidget(QtWidgets.QWidget):
         self.start(False)
         self.slaves = []
         try:
-            from ..can import Can
-            for devname, can in {k: v for k, v in self.device_list.items() if isinstance(v, Can)}.items():
+            from ..rover import Rover
+            for devname, can in {k: v for k, v in self.device_list.items() if isinstance(v, Rover)}.items():
                 for name, id in can.axes():
                     description = name + "(" + str(id) + ")"
                     self.slaves.append(Slave(can, description, id, step=False, method="power"))

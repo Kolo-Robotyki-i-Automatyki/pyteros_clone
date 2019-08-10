@@ -21,7 +21,7 @@ class MapWidget(QWidget):
 
 		self.rover = None
 		try:
-			for name, dev in {k: v for k, v in connected_devices.items() if isinstance(v, Can)}.items():
+			for name, dev in {k: v for k, v in connected_devices.items() if isinstance(v, Rover)}.items():
 				self.rover = dev
 				break
 			else:

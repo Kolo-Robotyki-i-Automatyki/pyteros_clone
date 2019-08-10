@@ -7,7 +7,7 @@ from PyQt5 import QtCore,QtWidgets,QtGui
 import PyQt5
 import jsonpickle
 import time
-from ..can import Can
+from ..rover import Rover
 
 dead_zone = 0.15
 
@@ -19,7 +19,7 @@ class IKScripterWidget(QtWidgets.QWidget):
         self.device_list = slave_devices
         self.rover = None
         try:
-            for rovername, rover in {k: v for k, v in self.device_list.items() if isinstance(v, Can)}.items():
+            for rovername, rover in {k: v for k, v in self.device_list.items() if isinstance(v, Rover)}.items():
                 self.rover = rover
                 break
         except Exception as e:

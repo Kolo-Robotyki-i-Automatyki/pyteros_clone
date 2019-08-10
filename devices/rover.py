@@ -96,7 +96,6 @@ class RoverWorker(DeviceWorker):
         self.available_devices = {}
 
     def init_device(self):
-        print(sys.version)
         self._bus = can.interface.Bus(bustype="socketcan", channel="can0", bitrate=250000)
 
         self.data_lock = threading.Lock()
@@ -574,7 +573,6 @@ class RoverWorker(DeviceWorker):
 
     @remote
     def send(self, id, data):
-        print("send")
         self._bus.send(can.Message(arbitration_id=id, data = data, extended_id = False))
 
     @remote
