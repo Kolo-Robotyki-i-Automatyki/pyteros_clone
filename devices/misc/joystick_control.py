@@ -262,11 +262,18 @@ class JoystickControlWidget(QtWidgets.QWidget):
     def timeout(self):
         if not self.active:
             return
-        state_raw = self.xbox.currentStatus()
+        try:
+            state_raw = self.xbox.currentStatus()
+        except:
+            state_raw = {"connected": False}
         boost = 1
         if state_raw["connected"]:
             boost *= (1 - state_raw["left_trigger"])
             boost *= (1 + state_raw["right_trigger"])
+        else:
+            self.timer.start(40)
+            return state_raw
+
 
         state = {}
         alt = (state_raw['button9'] > 0)
