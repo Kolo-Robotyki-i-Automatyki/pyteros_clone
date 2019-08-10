@@ -11,10 +11,10 @@ default_pub_port = 7005
 
 class XBoxWorker(DeviceWorker):
 
-    def __init__(self, req_port=default_req_port, pub_port=default_pub_port, id=0, **kwargs):
+    def __init__(self, req_port=default_req_port, pub_port=default_pub_port, id=0, reversed=False, **kwargs):
         self.device_number = int(id)
         super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
-
+        self.reversed = reversed
         self.axes = {
             'ABS_X': 'l_thumb_x',
             'ABS_Y': 'l_thumb_y',
@@ -69,6 +69,9 @@ class XBoxWorker(DeviceWorker):
                             value = value / 2 ** 8
                         if axis in ['ABS_HAT0Y']:
                             value = -value
+                        if axis in ['ABS_Y', 'ABS_RY']:
+                            if self.reversed:
+                                value = -value
                         with self.state_lock:
                             self.values[axis] = value
             except Exception as e:
