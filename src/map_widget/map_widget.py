@@ -1,6 +1,6 @@
 
 from src.map_widget.sample_image_item import SampleImageItem
-from devices.can import Can
+from devices.rover import Rover
 
 import os
 import scipy as sp
@@ -182,8 +182,8 @@ class MapWidget(QtWidgets.QWidget):
         layout.addLayout(hlayout4)
 
         try:
-            from devices.can import Can
-            for name, can in {k: v for k, v in self.device_list.items() if isinstance(v, Can)}.items():
+            from devices.rover import Rover
+            for name, can in {k: v for k, v in self.device_list.items() if isinstance(v, Rover)}.items():
                 self.can = can
         except Exception as e:
             print(e)
@@ -238,8 +238,8 @@ class MapWidget(QtWidgets.QWidget):
         self.slaves = []
 
         try:
-            from devices.can import Can
-            for name, can in {k: v for k, v in self.device_list.items() if isinstance(v, Can)}.items():
+            from devices.rover import Rover
+            for name, can in {k: v for k, v in self.device_list.items() if isinstance(v, Rover)}.items():
                 self.pools.append(_create_can_poll(can, "x", 0))
                 self.pools.append(_create_can_poll(can, "y", 1))
         except Exception as e:

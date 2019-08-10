@@ -11,6 +11,7 @@ from devices.autonomy import Autonomy
 from scipy import optimize
 import subprocess
 import math
+import sys
 import struct
 from math import sin, cos
 import threading
@@ -23,8 +24,8 @@ from devices.reach_tcp import Reach
 
 try:
     import can
-except Exception:
-    pass
+except Exception as e:
+    print(e)
 
 try:
     import Adafruit_DHT
@@ -35,8 +36,6 @@ try:
     from devices.markers_reader import TagReader
 except Exception:
     pass
-
-    print("ModuleNotFoundError: No module named 'can'")
 PI = 3.14159265357
 default_req_port = 10200
 default_pub_port = 10201
@@ -59,7 +58,7 @@ def list_to_int(bytes):
 
 lipo_characteristics = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,6,6,6,6,6,6,6,6,6,7,7,7,7,8,8,8,8,8,9,9,9,10,10,10,11,11,12,12,12,13,13,13,14,14,14,15,16,16,17,17,18,19,19,20,20,21,22,22,24,25,26,27,28,29,31,33,34,36,37,39,41,43,45,46,47,49,50,52,53,54,55,56,56,57,58,59,59,60,62,63,64,64,65,66,66,67,68,68,69,69,70,71,71,72,72,73,73,74,74,75,75,76,77,77,78,78,79,79,80,80,81,81,82,82,83,83,84,84,85,85,86,86,87,87,87,88,88,89,89,90,90,90,91,91,92,92,92,93,93,94,94,94,95,95,95,96,96,96,97,97,97,97,98,98,98,99,99,99,99,99,99,99,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100]
 
-class CanWorker(DeviceWorker):
+class RoverWorker(DeviceWorker):
     def __init__(self, req_port=default_req_port, pub_port=default_pub_port, **kwargs):
         super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
         self.messages = []
@@ -97,6 +96,7 @@ class CanWorker(DeviceWorker):
         self.available_devices = {}
 
     def init_device(self):
+        print(sys.version)
         self._bus = can.interface.Bus(bustype="socketcan", channel="can0", bitrate=250000)
 
         self.data_lock = threading.Lock()
@@ -157,7 +157,7 @@ class CanWorker(DeviceWorker):
             self.send(id, [36] + list(reversed(bytearray(struct.pack("i", int(10000 * pid[1]))))))
             self.send(id, [37] + list(reversed(bytearray(struct.pack("i", int(10000 * pid[2]))))))
 
-        print("Can initialized")
+        print("Rover initialized")
 
 
     def status(self):
@@ -197,8 +197,6 @@ class CanWorker(DeviceWorker):
 
             d['battery'] = lipo_characteristics[i]
 
-        with self.auto_lock:
-            d['autonomy'] = self.autonomy.get_status()
         self.logfile.write("%f\t%f\n" % (time(), sum(self.battery_v) / 40.0))
         self.logc += 1
         if self.logc % 100 == 0:
@@ -206,7 +204,6 @@ class CanWorker(DeviceWorker):
 
         return d
 
-        # This method is override of can.Listener method, so message is in sense of packet.
 
     @remote
     def read(self):
@@ -624,21 +621,21 @@ class CanWorker(DeviceWorker):
         if len(params) == 4:
             outa, outb, outc, outd = [int((v % (2 * PI)) * 1800 / PI) for v in params]
             self._bus.send(can.Message(arbitration_id=int(arm_lower),
-                                        data=[8, (outa >> 8) & 0xff, outa & 0xff], extended_id=False))
+                                         data=[8, (outa >> 8) & 0xff, outa & 0xff], extended_id=False))
             self._bus.send(can.Message(arbitration_id=int(arm_upper),
-                                        data=[8, (outb >> 8) & 0xff, outb & 0xff], extended_id=False))
+                                         data=[8, (outb >> 8) & 0xff, outb & 0xff], extended_id=False))
             self._bus.send(can.Message(arbitration_id=int(grip_lat),
-                                        data=[8, (outc >> 8) & 0xff, outc & 0xff], extended_id=False))
+                                         data=[8, (outc >> 8) & 0xff, outc & 0xff], extended_id=False))
             self._bus.send(can.Message(arbitration_id=int(arm_rot),
-                                        data=[8, (outd >> 8) & 0xff, outd & 0xff], extended_id=False))
+                                         data=[8, (outd >> 8) & 0xff, outd & 0xff], extended_id=False))
         else: # without arm rotation
             outa, outb, outc = [int((v % (2 * PI)) * 1800 / PI) for v in params]
             self._bus.send(can.Message(arbitration_id=int(arm_lower),
-                                       data=[8, (outa >> 8) & 0xff, outa & 0xff], extended_id=False))
+                                         data=[8, (outa >> 8) & 0xff, outa & 0xff], extended_id=False))
             self._bus.send(can.Message(arbitration_id=int(arm_upper),
-                                       data=[8, (outb >> 8) & 0xff, outb & 0xff], extended_id=False))
+                                         data=[8, (outb >> 8) & 0xff, outb & 0xff], extended_id=False))
             self._bus.send(can.Message(arbitration_id=int(grip_lat),
-                                       data=[8, (outc >> 8) & 0xff, outc & 0xff], extended_id=False))
+                                         data=[8, (outc >> 8) & 0xff, outc & 0xff], extended_id=False))
     @remote
     def ik_arm(self, params):
         print(params)
@@ -736,8 +733,8 @@ class CanWorker(DeviceWorker):
 
 
     
-@include_remote_methods(CanWorker)
-class Can(DeviceOverZeroMQ):
+@include_remote_methods(RoverWorker)
+class Rover(DeviceOverZeroMQ):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.last_status = {}

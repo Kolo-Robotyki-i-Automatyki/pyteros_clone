@@ -1,10 +1,10 @@
 motors:
-  name: Can
+  name: Rover
   host: yellow
   req_port: 10200
   pub_port: 10201
-  client_class: can.Can
-  worker_class: can.CanWorker
+  client_class: rover.Rover
+  worker_class: rover.RoverWorker
 
 xbox1:
   name: XBox1

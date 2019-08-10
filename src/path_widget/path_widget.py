@@ -1,6 +1,6 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
 
-from devices.can import Can
+from devices.rover import Rover
 from devices.reach_tcp import Reach
 from devices.imu_get import Orientation
 
@@ -80,7 +80,7 @@ class PathCreator(QtWidgets.QWidget):
         # todo change this (?)
         self.rover = None
         try:
-            for name, dev in {k: v for k, v in connected_devices.items() if isinstance(v, Can)}.items():
+            for name, dev in {k: v for k, v in connected_devices.items() if isinstance(v, Rover)}.items():
                 self.rover = dev
                 break
             else:
@@ -147,8 +147,8 @@ class PathCreator(QtWidgets.QWidget):
         self.map_redraw_timer.start()
 
     def _redraw_map(self):
-        if self.rover is not None:
-            self.status_label.setText(self.rover.get_auto_status())
+        #if self.rover is not None:
+        #    self.status_label.setText(self.rover.get_auto_status())
 
         self.map_widget.set_waypoints(self.points)
         # if self.rover is not None:
