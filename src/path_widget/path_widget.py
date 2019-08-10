@@ -147,7 +147,8 @@ class PathCreator(QtWidgets.QWidget):
         self.map_redraw_timer.start()
 
     def _redraw_map(self):
-        self.status_label.setText(self.rover.get_auto_status())
+        if self.rover is not None:
+            self.status_label.setText(self.rover.get_auto_status())
 
         self.map_widget.set_waypoints(self.points)
         # if self.rover is not None:
