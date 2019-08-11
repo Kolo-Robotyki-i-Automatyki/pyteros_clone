@@ -192,8 +192,8 @@ class Canvas(QWidget):
 				rows.append('Next task: {}'.format(status['next_task']))
 			if 'tasks' in status.keys():
 				rows.append('Tasks:')
-				for task_type, args in status['tasks']:
-					rows.append('\t{}({})'.format(task_type, args))
+				for task_descr in status['tasks']:
+					rows.append('\t{}'.format(task_descr))
 			for key, value in status.items():
 				if key in ['state', 'next_task', 'tasks']:
 					continue

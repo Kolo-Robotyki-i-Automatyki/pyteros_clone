@@ -200,6 +200,8 @@ class RoverWorker(DeviceWorker):
 
             d['battery'] = lipo_characteristics[i]
 
+        d['autonomy'] = self.autonomy.get_status()
+
         self.logfile.write("%f\t%f\n" % (time(), sum(self.battery_v) / 40.0))
         self.logc += 1
         if self.logc % 100 == 0:
