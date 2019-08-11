@@ -15,7 +15,7 @@ import math
 
 class MapWidget(QWidget):
 	rover_updated = pyqtSignal(object, float)
-	autonomy_updated = pyqtSignal(str)
+	autonomy_updated = pyqtSignal(dict)
 
 	def __init__(self, active_devices, parent=None):
 		super().__init__(parent)
@@ -45,7 +45,8 @@ class MapWidget(QWidget):
 		self.routes.auto_started.connect(self._start_auto)
 		self.routes.auto_stopped.connect(self._stop_auto)
 		self.rover_updated.connect(self.canvas.set_rover_coord)
-		self.autonomy_updated.connect(self.routes.display_auto_status)
+		self.rover_updated.connect(self.routes.set_rover_coord)
+		self.autonomy_updated.connect(self.canvas.display_auto_status)
 
 		self.routes.load_data(self.config.get('routes', {}))
 		self.pins.load_data(self.config.get('pins', {}))
@@ -91,13 +92,13 @@ class MapWidget(QWidget):
 		heading = math.degrees(status.get('heading', 0))
 		self.rover_updated.emit((lat, lon), heading)
 
-		auto_status = status.get('autonomy', '')
+		auto_status = status.get('autonomy', {})
 		self.autonomy_updated.emit(auto_status)
 
 	def _start_auto(self, route):
 		if self.rover is not None:
-			self.rover.set_waypoints(route)
-			self.rover.start_auto_from_waypoint(0)
+			self.rover.set_tasks(route)
+			self.rover.start_auto_from_task(0)
 
 	def _stop_auto(self):
 		if self.rover is None:

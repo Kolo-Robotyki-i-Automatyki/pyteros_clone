@@ -40,12 +40,23 @@ class Canvas(QWidget):
 		self.rover_heading = 0
 		self.rover_trace = []
 
+		self.lineedit_latitude = QLineEdit()
+		self.lineedit_longitude = QLineEdit()
 		self.checkbox_follow = QCheckBox('Follow the rover')
+		
+		self.lineedit_latitude.setPlaceholderText('latitude')
+		self.lineedit_longitude.setPlaceholderText('longitude')
 		self.checkbox_follow.setChecked(True)
+
+		self.lineedit_latitude.editingFinished.connect(self._publish_pos)
+		self.lineedit_longitude.editingFinished.connect(self._publish_pos)
+
 		main_layout = QVBoxLayout()
 		self.setLayout(main_layout)
 		main_layout.addStretch()
 		main_layout.addWidget(self.checkbox_follow)
+		main_layout.addWidget(self.lineedit_latitude)
+		main_layout.addWidget(self.lineedit_longitude)
 
 		self.repaint_timer = QTimer()
 		self.repaint_timer.setSingleShot(False)
@@ -81,9 +92,15 @@ class Canvas(QWidget):
 	def display_pins(self, pins):
 		self.pins = pins
 
+	@pyqtSlot(dict)
+	def display_auto_status(self, status):
+		self.auto_status = status
+
 	@pyqtSlot(float, float)
 	def select_pos(self, lat, lon):
 		self.selected_point = (lat, lon)
+		self.lineedit_latitude.setText('{:2.9f}'.format(lat))
+		self.lineedit_longitude.setText('{:2.9f}'.format(lon))
 
 
 	def paintEvent(self, event):
@@ -164,6 +181,30 @@ class Canvas(QWidget):
 			painter.drawText(QPointF(5, 30), 'longitude:\t{:.6f}'.format(lon))
 		painter.drawText(QPointF(5, 45), 'heading:  \t{:.1f}'.format(self.rover_heading))
 
+		# autonomy status
+		try:
+			painter.setPen(Qt.black)
+			status = self.auto_status
+			rows = []
+			if 'state' in status.keys():
+				rows.append('Autonomy state: {}'.format(status['state']))
+			if 'next_task' in status.keys():
+				rows.append('Next task: {}'.format(status['next_task']))
+			if 'tasks' in status.keys():
+				rows.append('Tasks:')
+				for task_type, args in status['tasks']:
+					rows.append('\t{}({})'.format(task_type, args))
+			for key, value in status.items():
+				if key in ['state', 'next_task', 'tasks']:
+					continue
+				rows.append('{} := {}'.format(key, value))
+			next_row_pos = 70
+			for row in rows:
+				painter.drawText(QPointF(5, next_row_pos), row)
+				next_row_pos += 15
+		except Exception as e:
+			print('[map] drawing autonomy status: {}'.format(e))
+
 		# rover
 		if self.rover_pos is not None:
 			painter.save()
@@ -187,7 +228,7 @@ class Canvas(QWidget):
 		if event.button() == Qt.LeftButton:
 			click_pos = self._xy_to_pos(click_xy)
 			self.pos_selected.emit(*click_pos)
-			self.selected_point = (click_pos)
+			self.select_pos(*click_pos)
 		elif event.button() == Qt.RightButton:
 			self.dragging = True
 			self.prev_click = click_xy
@@ -210,6 +251,12 @@ class Canvas(QWidget):
 		if event.button() == Qt.RightButton:
 			self.dragging = False
 
+	pyqtSlot()
+	def _publish_pos(self):
+		lat = get_coord_from_lineedit(self.lineedit_latitude, is_latitude=True)
+		lon = get_coord_from_lineedit(self.lineedit_longitude, is_latitude=False)
+
+		self.pos_selected.emit(lat, lon)
 
 	def _xy_to_pos(self, xy):
 		x, y = xy

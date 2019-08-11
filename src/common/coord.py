@@ -98,14 +98,16 @@ def get_coord_from_lineedit(lineedit, is_latitude: bool):
 		if len(val_str) == 0:
 			val_str = '0.0'
 
+	val_str = val_str.replace(',', '.')
+
 	try:
-		if is_latitude:
-			val = parse_latitude(val_str)
-		else:
-			val = parse_longitude(val_str)
-	except ValueError:
+		val = float(val_str)
+	except:
 		try:
-			val = float(val_str)
+			if is_latitude:
+				val = parse_latitude(val_str)
+			else:
+				val = parse_longitude(val_str)
 		except:
 			val = 0.0
 
