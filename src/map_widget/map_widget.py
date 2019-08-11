@@ -1,6 +1,6 @@
 
 from src.map_widget.sample_image_item import SampleImageItem
-from devices.rover import Rover
+from devices.rover import Rover,relative_position_default_origin
 
 import os
 import scipy as sp
@@ -13,6 +13,8 @@ import numpy
 
 epsilon = 0.000000001
 
+PI = 3.14159265357
+deg = PI / 180
 
 class ZoomableGraphicsView(QtWidgets.QGraphicsView):
     def __init__(self, parent=None):
@@ -147,6 +149,16 @@ class MapWidget(QtWidgets.QWidget):
         self.ywidget = QtWidgets.QLineEdit()
         self.ywidget.setEnabled(False)
         hlayout2.addWidget(self.ywidget)
+        hlayout2.addSpacing(20)
+        hlayout2.addWidget(QtWidgets.QLabel("lon:"))
+        self.lonwidget = QtWidgets.QLineEdit()
+        self.lonwidget.setEnabled(False)
+        hlayout2.addWidget(self.lonwidget)
+        hlayout2.addSpacing(20)
+        hlayout2.addWidget(QtWidgets.QLabel("lat:"))
+        self.latwidget = QtWidgets.QLineEdit()
+        self.latwidget.setEnabled(False)
+        hlayout2.addWidget(self.latwidget)
         layout.addLayout(hlayout2)
         self.show()
 
@@ -225,6 +237,9 @@ class MapWidget(QtWidgets.QWidget):
             position = QtCore.QPointF(event.scenePos())
             self.xwidget.setText(str(position.x()))
             self.ywidget.setText(str(position.y()))
+            origin = relative_position_default_origin
+            self.latwidget.setText(str(round(origin[0] + position.y()/(6371000*deg), 6)))
+            self.lonwidget.setText(str(round(origin[1] + position.x() / math.cos(deg*origin[0]+position.y()/6371000)/(6371000*deg), 6)))
             QtWidgets.QGraphicsScene.mouseMoveEvent(self.scene, event)  # propagate to objects in scene
 
         self.scene.mouseMoveEvent = onMouseMoveEvent
@@ -286,13 +301,13 @@ class MapWidget(QtWidgets.QWidget):
                 self.slopepoints.append(point)
             
             '''
-
+            '''
             try:
                 tags = self.can.tags()
             except Exception:
                 tags = [None for i in range(15)]
                 print("error while loading tags list")
-
+            
             try:
 
                 for i in range(35):
@@ -319,7 +334,7 @@ class MapWidget(QtWidgets.QWidget):
                         self.scene.addItem(io)
                         self.tags.append(io)
             except Exception:
-                pass
+                pass'''
 
             for direction, combo in self.combos.items():
                 if combo.currentText() == "None":

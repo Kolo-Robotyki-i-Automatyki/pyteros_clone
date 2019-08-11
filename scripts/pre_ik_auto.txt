@@ -1,7 +1,7 @@
-low 190
-up 191
-rot 200
-grip 201
+low 188
+up 190
+rot 196
+grip 195
 5 low 1 up -1
 7 low -0.3 up 0.3
 0 low 0 up 0
@@ -11,4 +11,6 @@ grip 201
 0.2 grip 0 rot 0
 3 grip 0.3 rot 0.3
 0 grip 0 rot 0
+2
+0 apply_index
 0 apply_index

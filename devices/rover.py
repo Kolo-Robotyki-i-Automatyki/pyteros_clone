@@ -37,6 +37,7 @@ try:
 except Exception:
     pass
 PI = 3.14159265357
+deg = PI / 180
 default_req_port = 10200
 default_pub_port = 10201
 
@@ -51,7 +52,7 @@ arm_rot = 196
 grip_lat = 195
 
 pid_settings = {arm_lower: [5, 0, 0.005], arm_upper: [-5, 0, -0.005], arm_rot: [-0.5, 0, -5], grip_lat: [1, 0, 1]}
-relative_position_default_origin = (51.452972, -112.716000)#(52.211415, 20.983336)
+relative_position_default_origin = (51.470876, -112.752628)#(52.211415, 20.983336)
 
 def list_to_int(bytes):
     return int.from_bytes(bytearray(bytes), byteorder='big', signed=True)
@@ -593,10 +594,10 @@ class RoverWorker(DeviceWorker):
             if a >= 3600:
                 a = 3599
             self.send(motor, [38, a >> 8, a & 0xff])
-        set(arm_lower, self.encoders[arm_lower] + 153.8 - self.index_pulses[arm_lower])
-        set(arm_upper, self.encoders[arm_upper] + 117.7 - self.index_pulses[arm_upper])
-        set(grip_lat, self.encoders[grip_lat] + 152.0 - self.index_pulses[grip_lat])
-        set(arm_rot, self.encoders[arm_rot] + 200.0 - self.index_pulses[arm_rot])
+        set(arm_lower, self.encoders[arm_lower] + 153.8 + 7.3 - self.index_pulses[arm_lower])
+        set(arm_upper, self.encoders[arm_upper] + 117.7 - 2.4 - self.index_pulses[arm_upper])
+        set(grip_lat, self.encoders[grip_lat] + 152.0 - 3.2 - self.index_pulses[grip_lat])
+        set(arm_rot, self.encoders[arm_rot] + 152 - self.index_pulses[arm_rot])
 
     @remote
     def get_encoders(self):
@@ -813,8 +814,14 @@ class Rover(DeviceOverZeroMQ):
         self.edit_position_x.setFixedWidth(90)
         self.edit_position_y= QtWidgets.QLineEdit()
         self.edit_position_y.setFixedWidth(90)
+        self.edit_position_lon= QtWidgets.QLineEdit()
+        self.edit_position_lon.setFixedWidth(90)
+        self.edit_position_lat= QtWidgets.QLineEdit()
+        self.edit_position_lat.setFixedWidth(90)
         layout_position.addWidget(self.edit_position_x)
         layout_position.addWidget(self.edit_position_y)
+        layout_position.addWidget(self.edit_position_lon)
+        layout_position.addWidget(self.edit_position_lat)
         layout_position.addStretch(1)
         layout.addLayout(layout_position)
         layout.addStretch(1)
@@ -855,6 +862,8 @@ class Rover(DeviceOverZeroMQ):
         self.battery_label.setText(str(status["battery"]) + '%\n' + str(round(status["voltage"], 2)) + ' V\n' + str(round(status["voltage"] / 6, 2)) + ' V\n')
         self.edit_position_x.setText(str(round(status["position"][0], 2)))
         self.edit_position_y.setText(str(round(status["position"][1], 2)))
+        self.edit_position_lon.setText(str(round(status["coordinates"][0], 6)))
+        self.edit_position_lat.setText(str(round(status["coordinates"][1], 6)))
 
         for i in range(4):
             self.editswheels[i].setText(str(status["wheels"][i]))
