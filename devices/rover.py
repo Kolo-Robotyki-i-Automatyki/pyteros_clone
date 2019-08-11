@@ -362,19 +362,23 @@ class RoverWorker(DeviceWorker):
 
                     auto_input = AutoInput(
                         position=self.get_coordinates(),
-                        heading=self.get_coordinates(),
+                        heading=self.get_orientation(),
                         script_running=self.is_script_running()
                     )
 
                     with self.auto_lock:
                         cmd_type, args = self.autonomy.get_command(auto_input)
 
+                        print(cmd_type, args)
+
                         if cmd_type == Command.NOP:
                             self.drive_both_axes(0.0, 0.0)
                         elif cmd_type == Command.SET_THROTTLE_TURNING:
-                            self.drive_both_axes(*args)
+                            throttle, turning = args
+                            self.drive_both_axes(throttle, turning)
                         elif cmd_type == Command.RUN_SCRIPT:
-                            self.run_script(self.script_library[args[0]])
+                            name, = args[0]
+                            self.run_script(self.script_library[name])
                             pass
             except Exception as e:
                 print('loop_auto(): {}'.format(str(e)))
@@ -397,6 +401,7 @@ class RoverWorker(DeviceWorker):
 
     @remote
     def end_auto(self):
+        print('trying to stop autonomy')
         try:
             with self.auto_lock:
                 self.autonomy.halt()
@@ -711,7 +716,7 @@ class RoverWorker(DeviceWorker):
 
     @remote
     def drive(self, axis, power):
-        print("drive")
+        # print("drive")
         if axis == 0:  # throttle
             self.throttle = power
         if axis == 1:  # turning

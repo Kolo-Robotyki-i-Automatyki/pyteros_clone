@@ -24,8 +24,8 @@ class Routes(QGroupBox):
 		self.selected_node = -1
 
 
-		button_stop = QPushButton('Start')
-		button_start = QPushButton('Stop')
+		button_stop = QPushButton('Stop')
+		button_start = QPushButton('Start')
 		self.list_routes = QListWidget()
 		button_new = QPushButton('New')
 		button_delete = QPushButton('Delete')
@@ -83,6 +83,7 @@ class Routes(QGroupBox):
 			print(e)
 
 	def _stop_auto(self):
+		print('[map/routes] stopping the autonomy')
 		self.auto_stopped.emit()
 
 	def _select_route(self, item):

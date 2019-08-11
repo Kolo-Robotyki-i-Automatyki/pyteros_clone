@@ -147,7 +147,7 @@ class Autonomy:
 		return Command.SET_THROTTLE_TURNING, [throttle, turning]
 
 	def _auto_launch_script(self, auto_input):
-		script_name = self.params
+		script_name, = self.params
 		
 		self.state = State.WAIT_FOR_SCRIPT_COMPLETION
 		self.params = time.time()

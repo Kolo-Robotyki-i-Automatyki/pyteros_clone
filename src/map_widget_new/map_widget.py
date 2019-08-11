@@ -101,5 +101,5 @@ class MapWidget(QWidget):
 			self.rover.start_auto_from_task(0)
 
 	def _stop_auto(self):
-		if self.rover is None:
+		if self.rover is not None:
 			self.rover.end_auto()
