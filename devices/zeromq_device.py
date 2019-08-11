@@ -27,7 +27,7 @@ def _makeFun(method_name):
         
         socks = dict(self.poll.poll(self.request_timeout))
         if socks.get(self.client) == zmq.POLLIN:
-            print('REMOTE {}()'.format(method_name))
+            # print('REMOTE {}()'.format(method_name))
             return self.client.recv_json(object_hook=array_object_hook)
         else:
             # Timeout. 

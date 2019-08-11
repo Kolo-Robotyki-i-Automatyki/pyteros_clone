@@ -349,26 +349,54 @@ class RoverWorker(DeviceWorker):
 
     def loop_auto(self):
         while True:
+            try:
+                while True:
+                    if not self.autonomy.is_running():
+                        sleep(0.5)
+                        continue
+
+                    coordinates = self.get_coordinates()
+                    orientation = self.get_orientation()
+
+                    with self.auto_lock:
+                        throttle, turning = self.autonomy.get_command(coordinates, orientation)
+                        # print('auto says "drive_bot_axes({}, {})"'.format(throttle, turning))
+                        self.drive_both_axes(throttle, turning)
+            except Exception as e:
+                print('loop_auto(): {}'.format(str(e)))
+
+    @remote
+    def set_waypoints(self, waypoints):
+        try:
             with self.auto_lock:
-                if not self.autonomy.is_running():
-                    sleep(0.5)
-                    continue
-
-                position = self.get_coordinates()
-                heading = self.get_orientation()
-
-                throttle, turning = self.autonomy.get_command(position, orientation)
-                self.drive_both_axes(throttle, turning)
+                self.autonomy.set_waypoints(waypoints)
+        except Exception as e:
+            print('set_waypoints(): {}'.format(str(e)))
 
     @remote
     def start_auto_from_waypoint(self, waypoint = 0):
-        with self.auto_lock:
-            self.autonomy.start(waypoint)
+        try:
+            with self.auto_lock:
+                self.autonomy.start(waypoint)
+        except Exception as e:
+            print('start_auto_from_waypoint(): {}'.format(str(e)))
 
     @remote
     def end_auto(self):
-        with self.auto_lock:
-            self.autonomy.halt()
+        try:
+            with self.auto_lock:
+                self.autonomy.halt()
+        except Exception as e:
+            print('end_auto(): {}'.format(str(e)))
+
+    @remote
+    def get_auto_status(self):
+        try:
+            with self.auto_lock:
+                return self.autonomy.get_status()
+        except Exception as e:
+            print('get_auto_status(): {}'.format(str(e)))
+            return '<exception occured>'
 
     @remote
     def get_coordinates(self):
@@ -394,11 +422,6 @@ class RoverWorker(DeviceWorker):
             return y
         else:
             return (x, y)
-
-    @remote
-    def set_waypoints(self, waypoints):
-        with self.auto_lock:
-            self.autonomy.set_waypoints(waypoints)
 
     @remote
     def abort_script(self):
@@ -849,7 +872,7 @@ class Rover(DeviceOverZeroMQ):
         
     def updateSlot(self, status):
         self.last_status = status
-		
+
         self.edits_sensors[0].setText(str(round(status["air_temperature"], 2)))
         self.edits_sensors[1].setText(str(round(status["air_humidity"], 2)))
         self.edits_sensors[2].setText(str(round(status["air_co2"], 2)))

@@ -125,7 +125,7 @@ if __name__ == '__main__':
             pass
         except Exception as e:
             traceback.print_exc(file=sys.stdout)'''
-            
+
         try:
             from src.map_widget import map_widget
             w = map_widget.MapWidget(devices.active_devices)

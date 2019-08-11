@@ -7,6 +7,7 @@ from src.map_widget_new.routes_widget import Routes
 from src.map_widget_new.photo_loader_widget import PhotoLoader
 from src.map_widget_new.pins_widget import Pins
 
+from devices.rover import Rover
 from src.common.settings import Settings
 
 import math
@@ -20,14 +21,12 @@ class MapWidget(QWidget):
 		super().__init__(parent)
 
 		self.rover = None
-		try:
-			for name, dev in {k: v for k, v in connected_devices.items() if isinstance(v, Rover)}.items():
+		for name, dev in active_devices.items():
+			if isinstance(dev, Rover):
 				self.rover = dev
 				break
-			else:
-				print('[map] rover not connected')
-		except Exception as e:
-			print(e)
+		else:
+			print('[map] rover not connected')
 
 		self.config = Settings('map_widget')
 

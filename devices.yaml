@@ -14,6 +14,7 @@ xbox1:
   client_class: misc.xbox.XBoxPad
   worker_class: misc.xbox.XBoxWorker
   params:
+    refresh_rate: 0.01
     id: 0
 
 xbox2:
