@@ -129,7 +129,7 @@ if __name__ == '__main__':
         try:
             from src.map_widget import map_widget
             w = map_widget.MapWidget(devices.active_devices)
-            window.addPage(w, "Map old")
+            window.addPage(w, "Map")
         except NoRequiredDevicesError:
             pass
         except Exception as e:
@@ -138,7 +138,7 @@ if __name__ == '__main__':
         try:
             from src.map_widget_new import map_widget
             w = map_widget.MapWidget(devices.active_devices)
-            window.addPage(w, "Map")
+            window.addPage(w, "Map new")
         except NoRequiredDevicesError:
             pass
         except Exception as e:

@@ -4,6 +4,12 @@ from PyQt5.QtGui import *
 
 from src.common.coord import *
 
+import math
+import time
+
+
+TRACE_RESOLUTION = 1.0
+
 
 # an arrow representing the rover
 arrow_shape = QPolygonF([
@@ -30,8 +36,16 @@ class Canvas(QWidget):
 		self.route = []
 		self.pins = []
 		self.selected_point = None
-		self.rover_pos = (0, 0)
+		self.rover_pos = None
 		self.rover_heading = 0
+		self.rover_trace = []
+
+		self.checkbox_follow = QCheckBox('Follow the rover')
+		self.checkbox_follow.setChecked(True)
+		main_layout = QVBoxLayout()
+		self.setLayout(main_layout)
+		main_layout.addStretch()
+		main_layout.addWidget(self.checkbox_follow)
 
 		self.repaint_timer = QTimer()
 		self.repaint_timer.setSingleShot(False)
@@ -41,8 +55,19 @@ class Canvas(QWidget):
 
 	@pyqtSlot(object, float)
 	def set_rover_coord(self, pos, heading):
+		if pos == (0.0, 0.0):
+			return
+
 		self.rover_pos = pos
 		self.rover_heading = heading
+
+		if len(self.rover_trace) == 0:
+			self.rover_trace.append(self.rover_pos)
+		else:
+			prev_pos = self.rover_trace[-1]
+			dx, dy = relative_xy(prev_pos, pos)
+			if math.sqrt(dx * dx + dy * dy) >= TRACE_RESOLUTION:
+				self.rover_trace.append(self.rover_pos)
 
 	@pyqtSlot(list)
 	def show_images(self, images):
@@ -62,6 +87,9 @@ class Canvas(QWidget):
 
 
 	def paintEvent(self, event):
+		if self.checkbox_follow.isChecked() and self.rover_pos is not None:
+			self.pos = self.rover_pos
+
 		painter = QPainter(self)
 
 		canvas_width, canvas_height = self.width(), self.height()
@@ -80,13 +108,13 @@ class Canvas(QWidget):
 		    img_rect = QRect(left, top, math.ceil(right - left), math.ceil(bottom - top))
 		    painter.drawImage(img_rect, image)
 
-		# # trace
-		# painter.setPen(QPen(QColor.fromRgb(125, 190, 255), 3))
-		# if len(self.rover_trace) > 0:
-		#     trace_xy = [self.__pos_to_xy(pos) for pos, _ in self.rover_trace]
-		#     trace_xy.append(self.__pos_to_xy(self.rover_pos))
-		#     for (a, b) in zip(trace_xy[:-1], trace_xy[1:]):
-		#         painter.drawLine(QPointF(a[0], a[1]), QPointF(b[0], b[1]))
+		# trace
+		painter.setPen(QPen(QColor.fromRgb(125, 190, 255), 3))
+		if len(self.rover_trace) > 0:
+		    trace_xy = [self._pos_to_xy(pos) for pos in self.rover_trace]
+		    trace_xy.append(self._pos_to_xy(self.rover_pos))
+		    for (a, b) in zip(trace_xy[:-1], trace_xy[1:]):
+		        painter.drawLine(QPointF(a[0], a[1]), QPointF(b[0], b[1]))
 
 		# routes
 		route_xy = [self._pos_to_xy(node) for node in self.route]
@@ -127,19 +155,25 @@ class Canvas(QWidget):
 
 		# position and heading
 		painter.setPen(Qt.black)
-		painter.drawText(QPointF(5, 15), 'latitude: \t{:.6f}'.format(self.rover_pos[0]))
-		painter.drawText(QPointF(5, 30), 'longitude:\t{:.6f}'.format(self.rover_pos[1]))
+		if self.rover_pos is None:
+			painter.drawText(QPointF(5, 15), 'latitude:  \tunknown')
+			painter.drawText(QPointF(5, 30), 'longitude: \tunknown')
+		else:
+			lat, lon = self.rover_pos
+			painter.drawText(QPointF(5, 15), 'latitude: \t{:.6f}'.format(lat))
+			painter.drawText(QPointF(5, 30), 'longitude:\t{:.6f}'.format(lon))
 		painter.drawText(QPointF(5, 45), 'heading:  \t{:.1f}'.format(self.rover_heading))
 
 		# rover
-		painter.save()
-		painter.setPen(QPen(Qt.white, 1))
-		painter.setBrush(QBrush(QColor.fromRgb(0, 128, 255)))
-		x, y = self._pos_to_xy(self.rover_pos)
-		painter.translate(x, y)
-		painter.rotate(self.rover_heading)
-		painter.drawPolygon(arrow_shape)
-		painter.restore()
+		if self.rover_pos is not None:
+			painter.save()
+			painter.setPen(QPen(Qt.white, 1))
+			painter.setBrush(QBrush(QColor.fromRgb(0, 128, 255)))
+			x, y = self._pos_to_xy(self.rover_pos)
+			painter.translate(x, y)
+			painter.rotate(self.rover_heading)
+			painter.drawPolygon(arrow_shape)
+			painter.restore()
 
 	def wheelEvent(self, event):
 		y_shift = event.angleDelta().y()
