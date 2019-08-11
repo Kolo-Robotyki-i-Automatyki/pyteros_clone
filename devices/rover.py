@@ -15,6 +15,7 @@ import sys
 import struct
 from math import sin, cos
 import threading
+from devices.arm_widget import ArmWidget
 try:
     import serial
 except Exception:
@@ -93,6 +94,8 @@ class RoverWorker(DeviceWorker):
         self.soil_humidity = 0
         self.logfile = open("vlog.txt", "a");
         self.logc = 0
+        self.script_library = {}
+        self.script_is_running = False
         self.autonomy = Autonomy()
         self.available_devices = {}
 
@@ -196,8 +199,6 @@ class RoverWorker(DeviceWorker):
                 i = s - 180 * 4
 
             d['battery'] = lipo_characteristics[i]
-
-        d['autonomy'] = self.autonomy.get_status()
 
         self.logfile.write("%f\t%f\n" % (time(), sum(self.battery_v) / 40.0))
         self.logc += 1
@@ -357,11 +358,10 @@ class RoverWorker(DeviceWorker):
                         sleep(0.5)
                         continue
 
-                    # TODO check if a script is running
                     auto_input = AutoInput(
                         position=self.get_coordinates(),
                         heading=self.get_coordinates(),
-                        script_running=False
+                        script_running=self.is_script_running()
                     )
 
                     with self.auto_lock:
@@ -372,7 +372,7 @@ class RoverWorker(DeviceWorker):
                         elif cmd_type == Command.SET_THROTTLE_TURNING:
                             self.drive_both_axes(*args)
                         elif cmd_type == Command.RUN_SCRIPT:
-                            # TODO run named script
+                            self.run_script(self.script_library[args[0]])
                             pass
             except Exception as e:
                 print('loop_auto(): {}'.format(str(e)))
@@ -447,6 +447,10 @@ class RoverWorker(DeviceWorker):
             self.script_stop = 0
             self.script_code = code
 
+    @remote
+    def is_script_running(self):
+        return self.script_is_running
+
     def loop_script(self):
         while True:
             def is_number(s):
@@ -456,6 +460,7 @@ class RoverWorker(DeviceWorker):
                 except ValueError:
                     return False
 
+            self.script_is_running = False
             while True:
                 sleep(0.1)
                 with self.script_lock:
@@ -463,7 +468,7 @@ class RoverWorker(DeviceWorker):
                     self.script_code = ""
                 if code != "":
                     break
-
+            self.script_is_running = True
             lines = [line.split() for line in code.split("\n")]
             print(lines)
             var_dict = {}
@@ -524,6 +529,7 @@ class RoverWorker(DeviceWorker):
                     break
                 if abort:
                     break
+            abort = True
 
     @remote
     def fix_pos(self, x, y):
@@ -698,6 +704,10 @@ class RoverWorker(DeviceWorker):
             self._bus.send(can.Message(arbitration_id=int(id), data=[7, out >> 8, out & 0xff], extended_id=False))
 
     @remote
+    def update_script_library(self, library):
+        self.script_library = library
+
+    @remote
     def drive(self, axis, power):
         print("drive")
         if axis == 0:  # throttle
@@ -859,7 +869,10 @@ class Rover(DeviceOverZeroMQ):
         layout_position.addWidget(self.edit_position_lat)
         layout_position.addStretch(1)
         layout.addLayout(layout_position)
+        self.arm_widget = ArmWidget(dock)
+        layout.addWidget(self.arm_widget)
         layout.addStretch(1)
+
 
         dock.setWidget(widget)
         dock.setAllowedAreas(QtCore.Qt.TopDockWidgetArea | QtCore.Qt.BottomDockWidgetArea)
@@ -908,6 +921,14 @@ class Rover(DeviceOverZeroMQ):
             self.labels_encoders[i].setText("arm axis " + str(motors[i]))
             self.edits_encoder_position[i].setText(str(status["encoders"][motors[i]]))
             self.edits_index_pulses_positions[i].setText(str(status["index_pulses"][motors[i]]))
+        #print(status["encoders"])
+        #print(status["encoders"][str(arm_lower)])
+        #print(status["encoders"][str(arm_upper)])
+        #print(status["encoders"][str(grip_lat)])
+        try:
+            self.arm_widget.set_angles([status["encoders"][str(arm_lower)] * deg, status["encoders"][str(arm_upper)] * deg, status["encoders"][str(grip_lat)] * deg])
+        except Exception as e:
+            print(str(e))
 
     def send_from_gui(self):
         print(self.edits[0].text())
