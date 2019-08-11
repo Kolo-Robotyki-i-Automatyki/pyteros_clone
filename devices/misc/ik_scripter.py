@@ -93,14 +93,22 @@ class IKScripterWidget(QtWidgets.QWidget):
         file_list = datadir.entryList()
         self.files = []
         self.indexes = {}
+        programs = {}
         for file in file_list[2:]:
             print(file)
             if file[-4:] != '.txt':
                 continue
             name = file[0:-4]
+            try:
+                f = open("scripts" + os.sep + name + ".txt", "r")
+                text = f.read()
+                programs[name] = text
+            except Exception as e:
+                print(e)
             self.indexes[name] = len(self.files)
             self.files.append(name)
             self.list_files.addItem(name)
+        self.rover.update_script_library(programs)
         if last_file != None:
             self.list_files.setCurrentIndex(self.list_files.currentIndex().sibling(self.indexes[last_file], 0))
 
