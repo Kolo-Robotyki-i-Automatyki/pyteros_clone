@@ -7,7 +7,7 @@ from collections import deque
 from devices.pid import PID
 #from devices.temphum import DHT22
 from devices.ik import axes_to_arm, axes_to_rover, arm_to_axes, arm_to_rover, rover_to_arm, rover_to_axes
-from devices.autonomy import Autonomy
+from devices.autonomy import Autonomy, Command, Task, AutoInput
 from scipy import optimize
 import subprocess
 import math
@@ -355,31 +355,41 @@ class RoverWorker(DeviceWorker):
                         sleep(0.5)
                         continue
 
-                    coordinates = self.get_coordinates()
-                    orientation = self.get_orientation()
+                    # TODO check if a script is running
+                    auto_input = AutoInput(
+                        position=self.get_coordinates(),
+                        heading=self.get_coordinates(),
+                        script_running=False
+                    )
 
                     with self.auto_lock:
-                        throttle, turning = self.autonomy.get_command(coordinates, orientation)
-                        # print('auto says "drive_bot_axes({}, {})"'.format(throttle, turning))
-                        self.drive_both_axes(throttle, turning)
+                        cmd_type, args = self.autonomy.get_command(auto_input)
+
+                        if cmd_type == Command.NOP:
+                            self.drive_both_axes(0.0, 0.0)
+                        elif cmd_type == Command.SET_THROTTLE_TURNING:
+                            self.drive_both_axes(*args)
+                        elif cmd_type == Command.RUN_SCRIPT:
+                            # TODO run named script
+                            pass
             except Exception as e:
                 print('loop_auto(): {}'.format(str(e)))
 
     @remote
-    def set_waypoints(self, waypoints):
+    def auto_set_tasks(self, tasks):
         try:
             with self.auto_lock:
-                self.autonomy.set_waypoints(waypoints)
+                self.autonomy.set_tasks(tasks)
         except Exception as e:
-            print('set_waypoints(): {}'.format(str(e)))
+            print('set_tasks(): {}'.format(str(e)))
 
     @remote
-    def start_auto_from_waypoint(self, waypoint = 0):
+    def start_auto_from_task(self, task: int = 0):
         try:
             with self.auto_lock:
-                self.autonomy.start(waypoint)
+                self.autonomy.start(task)
         except Exception as e:
-            print('start_auto_from_waypoint(): {}'.format(str(e)))
+            print('start_auto_from_task(): {}'.format(str(e)))
 
     @remote
     def end_auto(self):
@@ -905,6 +915,15 @@ class Rover(DeviceOverZeroMQ):
 		
     def get_last_status(self):
         return self.last_status
+
+
+    def set_waypoints(self, waypoints):
+        tasks = [(Command.DRIVE_TO, (waypoint,)) for waypoint in waypoints]  
+        self.auto_set_tasks(tasks)
+
+    def set_tasks(self, tasks):
+        self.auto_set_tasks(tasks)
+
 
     #def get_position(self, axis):
     #    #with self.data_lock:

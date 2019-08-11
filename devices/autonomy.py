@@ -1,55 +1,118 @@
 from src.common.coord import *
 
+from enum import IntEnum
+import time
+
 
 MIN_DESTINATION_DIST = 0.5
+MIN_SCRIPT_WAIT_TIME = 10.0
+
+
+class Task(IntEnum):
+	DRIVE_TO = 1
+	RUN_SCRIPT = 2
+
+class State(IntEnum):
+	IDLE = 1
+	GET_NEXT_TASK = 2
+
+	DRIVE_TO = 10
+	LAUNCH_SCRIPT = 11
+	SLEEP = 12
+	WAIT_FOR_SCRIPT_COMPLETION = 13
+
+class Command(IntEnum):
+	NOP = 1
+	SET_THROTTLE_TURNING = 2
+	RUN_SCRIPT = 3
+
+
+class AutoInput:
+	def __init__(self, position, heading: float, script_running: bool):
+		self.position = position
+		self.heading = heading
+		self.script_running = script_running
 
 
 class Autonomy:
 	def __init__(self):
-		self.running = False
-		self.waypoints = []
-		self.next_waypoint = 0
+		self.halt()
+		self.tasks = []
+		self.next_task = 0
 
-	def set_waypoints(self, waypoints):
-		self.waypoints = waypoints
-
-	def start(self, starting_waypoint = 0):
-		if starting_waypoint < 0:
-			self.running = False
-			return
-
-		self.running = True
-		self.next_waypoint = starting_waypoint
-
-	def halt(self):
-		self.running = False
+		self.debug_status = {}
 
 	def is_running(self):
-		return self.running
+		return self.state != State.IDLE
+
+	def set_tasks(self, tasks):
+		self.tasks = tasks
+
+	def start(self, starting_task: int = 0):
+		if starting_task < 0:
+			self.halt()
+			return
+
+		self.state = State.GET_NEXT_TASK
+		self.params = None
+		self.next_task = starting_task
+
+	def halt(self):
+		self.state = State.IDLE
+		self.params = None
+		self.next_task = 0
 
 	def get_status(self):
-		str_running = 'in progress' if self.running else 'idle'
-		str_progress = '{} out of {}'.format(
-			self.next_waypoint,
-			len(self.waypoints)
-		)
-		return '{}; {}'.format(str_running, str_progress)
+		status = { 'state': (str(self.state), str(self.params)) }
+		status['tasks'] = [str(task) for task in self.tasks]
+		status['next_task'] = self.next_task
 
-	def get_command(self, position, heading):
-		'''
-		Input: position as (latitude, longitude), heading in radians
-		Returns pair (throttle, turning speed)
-		'''
-		if not self.is_running():
-			print('[auto] not running!')
-			return (0, 0)
+		status.update(self.debug_status)
 
-		if self.next_waypoint >= len(self.waypoints):
+		return status
+
+	def get_command(self, auto_input: AutoInput):
+		self.debug_status = {}
+
+		func = {
+			State.IDLE: self._auto_idle,
+			State.GET_NEXT_TASK: self._auto_get_next_task,
+			State.DRIVE_TO: self._auto_drive_to,
+			State.LAUNCH_SCRIPT: self._auto_launch_script,
+			State.WAIT_FOR_SCRIPT_COMPLETION: self._auto_wait_for_script_completion,
+		}[self.state]
+
+		try:
+			command = func(auto_input	)
+		except Exception as e:
+			self.debug_status['exception'] = str(e)
+			command = Command.NOP, []
+
+		self.debug_status['last_command'] = str(command)
+
+		return command
+
+	def _auto_idle(self, auto_input):
+		return Command.NOP, []
+
+	def _auto_get_next_task(self, auto_input):
+		if self.next_task >= len(self.tasks):
 			self.halt()
-			print('[auto] next_waypoints >= len(waypoints)')
-			return (0.0)
+		else:
+			task, args = self.tasks[self.next_task]
+			if task == Task.DRIVE_TO:
+				self.state = State.DRIVE_TO
+			elif task == Task.RUN_SCRIPT:
+				self.state = State.LAUNCH_SCRIPT
+			self.params = args
+			self.next_task += 1
+		return Command.NOP, []
 
-		next_waypoint = self.waypoints[self.next_waypoint]
+	def _auto_drive_to(self, auto_input):
+		next_waypoint = self.params
+		position = auto_input.position
+		heading = auto_input.heading
+
 		x, y = relative_xy(origin=position, destination=next_waypoint)
 		x, y = (
 			x * math.cos(heading) - y * math.sin(heading),
@@ -58,11 +121,10 @@ class Autonomy:
 
 		dist = math.sqrt(x * x + y * y)
 		if dist <= MIN_DESTINATION_DIST:
-			self.next_waypoint += 1
-			if self.next_waypoint >= len(self.waypoints):
-				self.halt()
 			print('[auto] reached the next waypoint')
-			return (0, 0)
+			self.state = State.GET_NEXT_TASK
+			self.params = None
+			return Command.NOP, []
 
 		heading_to_dist = 90 - math.degrees(math.atan2(y, x))
 		while heading_to_dist < -180:
@@ -70,15 +132,43 @@ class Autonomy:
 		while heading_to_dist > 180:
 			heading_to_dist -= 360
 
+		self.debug_status['target_x'] = x
+		self.debug_status['target_y'] = y
+		self.debug_status['heading_to_target'] = heading_to_dist
+
 		# TODO use a pid (?)
 		if heading_to_dist <= -45:
-			return (0.0, -0.3)
+			throttle, turning = 0.0, -0.3
 		elif heading_to_dist >= 45:
-			return (0.0, 0.3)
+			throttle, turning = 0.0, 0.3
 		else:
 			turning = 0.3 * (heading_to_dist / 45)
-			return (0.4, turning)
+			throttle = 0.4
+		return Command.SET_THROTTLE_TURNING, [throttle, turning]
 
+	def _auto_launch_script(self, auto_input):
+		script_name = self.params
+		
+		self.state = State.WAIT_FOR_SCRIPT_COMPLETION
+		self.params = time.time()
+
+		return Command.RUN_SCRIPT, [script_name]
+
+	def _auto_wait_for_script_completion(self, auto_input):
+		start_time = self.params
+		now = time.time()
+
+		if now - start_time < MIN_SCRIPT_WAIT_TIME:
+			self.debug_status['time_waiting'] = now - start_time
+		else:
+			if not auto_input.script_running:
+				self.state = State.GET_NEXT_TASK
+				self.params = None
+			
+		return Command.NOP, []
+
+
+# TODO rewrite this?
 
 def main():
 	import cv2
@@ -156,4 +246,6 @@ def main():
 
 
 if __name__ == '__main__':
-	main()
+	# it's outdated
+	# main()
+	pass
