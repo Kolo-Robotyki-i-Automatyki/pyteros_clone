@@ -1,6 +1,6 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, \
-    QLabel, QCheckBox, QPushButton, QLineEdit, QApplication
+    QLabel, QCheckBox, QPushButton, QLineEdit, QApplication, QComboBox
 from PyQt5.QtCore import pyqtSignal, pyqtSlot, QThread, QObject, QTimer
 
 import threading
@@ -58,6 +58,7 @@ class CommandRunner(QObject):
 
 class CameraControl(QWidget):
     close_viewer = pyqtSignal()
+    camera_name_updated = pyqtSignal(str, str)
 
     def __init__(self, dev_name: str, server_name: str, modes : List,
             host: str, port: int, server, parent=None):
@@ -69,22 +70,52 @@ class CameraControl(QWidget):
         self.host = host
         self.port = port
 
+        self.camera_name = ''
+
         if len(modes) == 0:
             raise Exception('camera "{}" has no available modes'.format(name))
-        self.modes = modes
-        self.mode_idx = 0
+
+        self.available_formats = list(set([fmt for (fmt, _, _, _) in modes]))
+        self.modes = {}
+        for fmt in self.available_formats:
+            modes_this_fmt = [(w, h, f) for (this_fmt, w, h, f) in modes if this_fmt == fmt]
+            try:
+                max_w = {
+                    'YUYV': 640,
+                    'MJPG': 800,
+                    'H264': 1280, 
+                }[fmt]
+            except:
+                max_w = 0
+            modes_limited = [(w, h, f) for (w, h, f) in modes_this_fmt if w <= max_w]
+            modes_sorted = sorted(list(set(modes_limited)))
+
+            if len(modes_sorted) > 0:
+                self.modes[fmt] = modes_sorted
+        
+        self.format = None
+        self.mode = None
 
         self.viewer = None
         self.viewer_thread = None
         self.window_open = False
 
+        self.lineedit_name = QLineEdit(self.camera_name)
+        self.lineedit_name.setPlaceholderText(self._get_dev_str())
+        self.lineedit_name.editingFinished.connect(self._update_camera_name)
 
         self.flip = 0
         self.button_flip = QPushButton('')
         self.button_flip.clicked.connect(self._cycle_flip)
 
-        self.button_quality = QPushButton('')
-        self.button_quality.clicked.connect(self._cycle_mode)
+        self.combo_format = QComboBox()
+        self.combo_format.currentIndexChanged.connect(self._select_format)
+        self.combo_quality = QComboBox()
+        self.combo_quality.currentIndexChanged.connect(self._select_quality)
+
+        for fmt in self.available_formats:
+            self.combo_format.addItem(fmt)
+        self._refresh_quality()
 
         self.checkbox_record = QCheckBox('record')
         
@@ -109,11 +140,13 @@ class CameraControl(QWidget):
             main_layout.addWidget(col)
 
         column([
+            self.lineedit_name,
             QLabel('Server: {}'.format(server_name)),
             QLabel('Device: {}'.format(dev_name))
         ])
         column([
-            self.button_quality,
+            self.combo_format,
+            self.combo_quality,
             self.button_flip
         ])
         column([
@@ -131,6 +164,12 @@ class CameraControl(QWidget):
         self.server_update_timer.timeout.connect(self._apply_server_update)
         self.server_update_timer.start()
 
+    def load_data(self, data):
+        id_str = self._get_dev_str()
+        if id_str in data:
+            self.camera_name = data[id_str]
+            self.lineedit_name.setText(self.camera_name)
+
     def is_recording(self):
         return self.checkbox_record.isChecked()
 
@@ -142,9 +181,6 @@ class CameraControl(QWidget):
 
     def _update_ui(self):
         self.button_flip.setText(video_transforms[self.flip])
-
-        (fmt, w, h, f) = self.modes[self.mode_idx]
-        self.button_quality.setText('{} {}x{} {} fps'.format(fmt, w, h, f))
 
         if not self.is_streaming() and not self.is_recording():
             self.button_start_stop.setEnabled(False)
@@ -160,13 +196,28 @@ class CameraControl(QWidget):
             self.checkbox_record.setEnabled(True)
             self.button_start_stop.setText('START')
 
+    def _get_dev_str(self):
+        return '{}:{}'.format(self.dev_name, self.server_name)
+
+    def _update_camera_name(self):
+        self.camera_name = self.lineedit_name.text()
+        self.camera_name_updated.emit(self._get_dev_str(), self.camera_name)
+
     def _cycle_flip(self):
         self.flip = (self.flip + 1) % len(video_transforms)
         self._update_ui()
 
-    def _cycle_mode(self):
-        self.mode_idx = (self.mode_idx + 1) % len(self.modes)
-        self._update_ui()
+    def _select_format(self, idx):
+        self.format = self.available_formats[idx]
+        self._refresh_quality()
+
+    def _select_quality(self, idx):
+        self.quality = self.modes[self.format][idx]
+
+    def _refresh_quality(self):
+        self.combo_quality.clear()
+        for (w, h, f) in self.modes[self.format]:
+            self.combo_quality.addItem('{}x{} {}'.format(w, h, f))
 
     def _toggle_capture(self):
         self.capture_on = not self.capture_on
@@ -187,7 +238,8 @@ class CameraControl(QWidget):
         def worker():
             try:
                 if self.capture_on:
-                    fmt, width, height, fps = self.modes[self.mode_idx]
+                    fmt = self.format
+                    width, height, fps = self.quality
                     self.server.set_camera_status(
                         dev_name=self.dev_name,
                         is_recording=is_recording,
@@ -222,7 +274,7 @@ class CameraControl(QWidget):
 
     def _open_window(self):
         port = self.port
-        pixel_format, _, _, _ = self.modes[self.mode_idx]
+        pixel_format = self.format
         
         print('[streaming] running viewer for {} {}'.format(pixel_format, port))
         
@@ -370,9 +422,10 @@ class StreamingWidget(QWidget):
                 print(e)
 
     def _add_device(self, dev_name: str, server_name: str, modes, hostname: str, port: int, server):
-        self.camera_widgets_container.layout().addWidget(
-            CameraControl(dev_name, server_name, modes, hostname, port, server)
-        )
+        new_panel = CameraControl(dev_name, server_name, modes, hostname, port, server)
+        new_panel.camera_name_updated.connect(self._update_camera_name)
+        new_panel.load_data(self.settings.get('camera_names', {}))
+        self.camera_widgets_container.layout().addWidget(new_panel)
 
     def _update_host(self, hostname: str):
         print('[streaming] hostname changed to {}'.format(hostname))
@@ -381,3 +434,9 @@ class StreamingWidget(QWidget):
 
         for cam in self.findChildren(CameraControl):
             cam.update_hostname(hostname)
+
+    @pyqtSlot(str, str)
+    def _update_camera_name(self, dev_str, camera_name):
+        names = self.settings.get('camera_names', {})
+        names[dev_str] = camera_name
+        self.settings.set('camera_names', names)

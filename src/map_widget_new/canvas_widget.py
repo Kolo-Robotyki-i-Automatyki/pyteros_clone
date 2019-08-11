@@ -118,7 +118,7 @@ class Canvas(QWidget):
 
 		# routes
 		route_xy = [self._pos_to_xy(node) for node in self.route]
-		if len(route_xy) >= 2:
+		if len(route_xy) >= 1:
 			painter.setPen(QPen(QColor.fromRgb(70, 255, 160), 4))
 			for (a, b) in zip(route_xy[:-1], route_xy[1:]):
 				painter.drawLine(QPointF(a[0], a[1]), QPointF(b[0], b[1]))
