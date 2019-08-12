@@ -117,6 +117,15 @@ if __name__ == '__main__':
         except Exception as e:
             traceback.print_exc(file=sys.stdout)
             
+        try:
+            from src.control_widget import control_widget
+            w = control_widget.JoystickControlWidget(devices.active_devices)
+            window.addPage(w, "Pad control [experimental]")
+        except NoRequiredDevicesError:
+            pass
+        except Exception as e:
+            traceback.print_exc(file=sys.stdout)
+
         '''try:
             from devices.misc import joystick_control2
             w = joystick_control2.JoystickControlWidget(devices.active_devices)

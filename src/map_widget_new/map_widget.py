@@ -81,7 +81,6 @@ class MapWidget(QWidget):
 		self.config.set('pins', self.pins.get_data(), save=False)
 		self.config.set('photos', self.photo_loader.get_data(), save=False)
 		self.config.save()
-		print('[map] autosave')
 
 	def _update_status(self):
 		if self.rover is None:

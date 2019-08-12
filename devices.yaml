@@ -1,6 +1,6 @@
 motors:
   name: Rover
-  host: yellow
+  host: 10.1.1.200
   req_port: 10200
   pub_port: 10201
   client_class: rover.Rover
@@ -29,7 +29,7 @@ xbox2:
 
 camera1:
   name: CameraPink
-  host: pink
+  host: 10.1.1.201
   req_port: 8501
   pub_port: 8502
   client_class: cameras.CameraServer
@@ -39,7 +39,7 @@ camera1:
 
 camera2:
   name: CameraBlue
-  host: blue
+  host: 10.1.1.202
   req_port: 8511
   pub_port: 8512
   client_class: cameras.CameraServer

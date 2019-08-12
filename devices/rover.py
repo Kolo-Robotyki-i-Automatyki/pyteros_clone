@@ -8,9 +8,12 @@ from devices.pid import PID
 #from devices.temphum import DHT22
 from devices.ik import axes_to_arm, axes_to_rover, arm_to_axes, arm_to_rover, rover_to_arm, rover_to_axes
 from devices.autonomy import Autonomy, Command, Task, AutoInput
+from enum import IntEnum
 from scipy import optimize
 import subprocess
 import math
+import random
+import socket
 import sys
 import struct
 from math import sin, cos
@@ -60,6 +63,16 @@ def list_to_int(bytes):
 
 lipo_characteristics = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,6,6,6,6,6,6,6,6,6,7,7,7,7,8,8,8,8,8,9,9,9,10,10,10,11,11,12,12,12,13,13,13,14,14,14,15,16,16,17,17,18,19,19,20,20,21,22,22,24,25,26,27,28,29,31,33,34,36,37,39,41,43,45,46,47,49,50,52,53,54,55,56,56,57,58,59,59,60,62,63,64,64,65,66,66,67,68,68,69,69,70,71,71,72,72,73,73,74,74,75,75,76,77,77,78,78,79,79,80,80,81,81,82,82,83,83,84,84,85,85,86,86,87,87,87,88,88,89,89,90,90,90,91,91,92,92,92,93,93,94,94,94,95,95,95,96,96,96,97,97,97,97,98,98,98,99,99,99,99,99,99,99,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100]
 
+COMMAND_STREAM_PORT = 17293
+
+
+class MoveCommand(IntEnum):
+    NOP = 0
+    POWER = 1
+    SERVO = 2
+    DRIVE = 3
+
+
 class RoverWorker(DeviceWorker):
     def __init__(self, req_port=default_req_port, pub_port=default_pub_port, **kwargs):
         super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
@@ -99,6 +112,7 @@ class RoverWorker(DeviceWorker):
         self.autonomy = Autonomy()
         self.available_devices = {}
         self.rover_reversed = False
+        self.cmd_socket = None
 
     def init_device(self):
         self._bus = can.interface.Bus(bustype="socketcan", channel="can0", bitrate=250000)
@@ -148,6 +162,13 @@ class RoverWorker(DeviceWorker):
         self.servopos = [1500 for i in range(124)]
         self.servopos[0] = 1730
         self.servo(0, 1)
+
+        self.cmd_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.cmd_stream_port = COMMAND_STREAM_PORT + random.randint(0, 10)
+        sock_addr = (self.address, self.cmd_stream_port)
+        self.cmd_socket.bind(sock_addr)
+        self.cmd_stream_loop = threading.Thread(target=self.loop_cmd_stream)
+        self.cmd_stream_loop.start()
 
         #self.tag_reader = TagReader()
 
@@ -541,6 +562,25 @@ class RoverWorker(DeviceWorker):
                 if abort:
                     break
             abort = True
+
+    def loop_cmd_stream(self):
+        while True:
+            try:
+                data, addr = self.cmd_socket.recvfrom(4096)
+                for cmd, axis, val in struct.iter_unpack('Bhf', data):
+                    cmd = MoveCommand(cmd)
+                    if cmd == MoveCommand.POWER:
+                        self.power(axis, power)
+                    elif cmd == MoveCommand.SERVO:
+                        self.servo(self, axis, power)
+                    elif cmd == MoveCommand.DRIVE:
+                        self.drive(axis, power)
+            except Exception as e:
+                print('[rover] loop_cmd_stream(): {}'.format(e))
+
+    @remote
+    def get_cmd_stream_port(self):
+        return self.cmd_stream_port
 
     @remote
     def fix_pos(self, x, y):

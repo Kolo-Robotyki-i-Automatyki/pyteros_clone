@@ -135,6 +135,7 @@ def load_workers(file='devices.yaml', hostname='localhost'):
             pub = dev_conf['pub_port']
 
             kwargs = {
+                'address': host,
                 'req_port': req,
                 'pub_port': pub,
             }

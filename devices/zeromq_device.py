@@ -119,12 +119,13 @@ class Logger():
 
 
 class DeviceWorker(Process):
-    def __init__(self, req_port=0, pub_port=0, refresh_rate=0.1):
+    def __init__(self, req_port=0, pub_port=0, refresh_rate=0.1, address='localhost'):
         if not req_port or not pub_port:
             raise Exception("Ports not specified for class: %s" % self.__name__)
         self.REQchannel = "tcp://*:" + str(req_port)
         self.PUBchannel = "tcp://*:" + str(pub_port)
         self.rep_channel = "tcp://localhost:"+str(req_port)
+        self.address = address
         self.refresh_rate = refresh_rate
         super().__init__()
 
@@ -195,8 +196,9 @@ class DeviceWorker(Process):
 
 @include_remote_methods(DeviceWorker)
 class DeviceOverZeroMQ(device.Device):
-    def __init__(self, req_port, pub_port=None, host="localhost"):           
+    def __init__(self, req_port, pub_port=None, host="localhost"):        
         self.thread = {}
+        self.host = host
         self.channel = "tcp://"+host+":"+str(req_port)
         self.client = context.socket(zmq.REQ)
         self.client.connect(self.channel)
