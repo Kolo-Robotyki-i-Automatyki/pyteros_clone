@@ -98,6 +98,7 @@ class RoverWorker(DeviceWorker):
         self.script_is_running = False
         self.autonomy = Autonomy()
         self.available_devices = {}
+        self.rover_reversed = False
 
     def init_device(self):
         self._bus = can.interface.Bus(bustype="socketcan", channel="can0", bitrate=250000)
@@ -265,10 +266,13 @@ class RoverWorker(DeviceWorker):
                         pass
                     self.encoders[motor] = (msg.data[1] * 256 + msg.data[2]) / 10
             elif msg.data[0] == 106:
-                self.compass_heading = (list_to_int(msg.data[5:7]) * 3.14159 / 180 / 10) % (2 * PI)
+                reversed_offset = 0
+                if self.rover_reversed:
+                    reversed_offset = PI
+                self.compass_heading = (list_to_int(msg.data[5:7]) * 3.14159 / 180 / 10 + reversed_offset) % (2 * PI)
                 self.compass_pitch = list_to_int(msg.data[1:3])  * 3.14159 / 180 / 10
                 self.compass_roll = list_to_int(msg.data[3:5])  * 3.14159 / 180 / 10
-                self.compass_terrain_direction = (self.compass_heading - math.atan2(self.compass_roll, self.compass_pitch)) % (2 * PI)
+                self.compass_terrain_direction = (self.compass_heading - math.atan2(self.compass_roll, self.compass_pitch) + reversed_offset) % (2 * PI)
                 self.compass_terrain_slope = math.asin((math.sin(self.compass_pitch) ** 2 + math.cos(self.compass_pitch) ** 2 * math.sin(self.compass_roll) ** 2) ** 0.5)
             elif msg.data[0] == 80:
                 self.soil_humidity = (2.56 - list_to_int(msg.data[1:3]) * 528 / 624 / 1000) / (2.56 - 1.35) * 100
@@ -728,11 +732,13 @@ class RoverWorker(DeviceWorker):
         left = self.throttle + self.turning
         right = -self.throttle + self.turning
 
-        self.power(129, left)
-        self.power(130, right)
+        if not self.rover_reversed:
+            self.power(129, left)
+            self.power(130, right)
+        else:
+            self.power(130, left)
+            self.power(129, right)
 
-        self.power(129, left)
-        self.power(130, right)
 
     @remote
     def drive_both_axes(self, throttle, turning):
@@ -781,6 +787,10 @@ class RoverWorker(DeviceWorker):
     def reset_available_devices(self):
         with self.data_lock:
             self.available_devices = {}
+
+    @remote
+    def set_rover_reversed(self, reversed = True):
+        self.rover_reversed = reversed
 
 
     
