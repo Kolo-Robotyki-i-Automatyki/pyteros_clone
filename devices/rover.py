@@ -63,7 +63,9 @@ def list_to_int(bytes):
 
 lipo_characteristics = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,6,6,6,6,6,6,6,6,6,7,7,7,7,8,8,8,8,8,9,9,9,10,10,10,11,11,12,12,12,13,13,13,14,14,14,15,16,16,17,17,18,19,19,20,20,21,22,22,24,25,26,27,28,29,31,33,34,36,37,39,41,43,45,46,47,49,50,52,53,54,55,56,56,57,58,59,59,60,62,63,64,64,65,66,66,67,68,68,69,69,70,71,71,72,72,73,73,74,74,75,75,76,77,77,78,78,79,79,80,80,81,81,82,82,83,83,84,84,85,85,86,86,87,87,87,88,88,89,89,90,90,90,91,91,92,92,92,93,93,94,94,94,95,95,95,96,96,96,97,97,97,97,98,98,98,99,99,99,99,99,99,99,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100]
 
+
 COMMAND_STREAM_PORT = 17293
+COMMAND_ID_HISTORY = 100
 
 
 class MoveCommand(IntEnum):
@@ -113,6 +115,8 @@ class RoverWorker(DeviceWorker):
         self.available_devices = {}
         self.rover_reversed = False
         self.cmd_socket = None
+        self.last_packet_id = None
+        self.packet_history = deque()
 
     def init_device(self):
         self._bus = can.interface.Bus(bustype="socketcan", channel="can0", bitrate=250000)
@@ -164,7 +168,7 @@ class RoverWorker(DeviceWorker):
         self.servo(0, 1)
 
         self.cmd_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.cmd_stream_port = COMMAND_STREAM_PORT + random.randint(0, 10)
+        self.cmd_stream_port = COMMAND_STREAM_PORT
         sock_addr = (self.address, self.cmd_stream_port)
         self.cmd_socket.bind(sock_addr)
         self.cmd_stream_loop = threading.Thread(target=self.loop_cmd_stream)
@@ -223,6 +227,8 @@ class RoverWorker(DeviceWorker):
             d['battery'] = lipo_characteristics[i]
 
         d['autonomy'] = self.autonomy.get_status()
+
+        d['cmd_stream_quality'] = len(self.packet_history) / COMMAND_ID_HISTORY
 
         self.logfile.write("%f\t%f\n" % (time(), sum(self.battery_v) / 40.0))
         self.logc += 1
@@ -567,8 +573,29 @@ class RoverWorker(DeviceWorker):
         while True:
             try:
                 data, addr = self.cmd_socket.recvfrom(4096)
-                for cmd, axis, val in struct.iter_unpack('Bhf', data):
+                packet_id = struct.unpack('I', data[:4])[0]
+
+                def preceed(first, second):
+                    return ((first + 2**32 - second) % (2**32) > (2**31))
+
+                if self.last_packet_id is None:
+                    self.last_packet_id = packet_id
+                    self.packet_history.append(packet_id)
+                else:
+                    if not preceed(self.last_packet_id, packet_id):
+                        # old packet, drop
+                        continue
+                    else:
+                        self.last_packet_id = packet_id
+                        self.packet_history.append(packet_id)
+                        while (packet_id + 2**32 - self.packet_history[0]) % (2**32) >= COMMAND_ID_HISTORY:
+                            self.packet_history.popleft()
+
+                for cmd, axis, power in struct.iter_unpack('Bhf', data[4:]):
                     cmd = MoveCommand(cmd)
+              
+                    # print('[rover] execute {}({}, {})'.format(cmd, axis, power))
+
                     if cmd == MoveCommand.POWER:
                         self.power(axis, power)
                     elif cmd == MoveCommand.SERVO:
@@ -928,8 +955,13 @@ class Rover(DeviceOverZeroMQ):
         layout.addLayout(layout_position)
         self.arm_widget = ArmWidget(dock)
         layout.addWidget(self.arm_widget)
-        layout.addStretch(1)
 
+        layout_connection = QtWidgets.QFormLayout()
+        self.cmd_stream_quality = QtWidgets.QLabel('?')
+        layout_connection.addRow(QtWidgets.QLabel('Connection quality:'), self.cmd_stream_quality)
+        layout.addLayout(layout_connection)
+
+        layout.addStretch(1)
 
         dock.setWidget(widget)
         dock.setAllowedAreas(QtCore.Qt.TopDockWidgetArea | QtCore.Qt.BottomDockWidgetArea)
@@ -969,6 +1001,7 @@ class Rover(DeviceOverZeroMQ):
         self.edit_position_y.setText(str(round(status["position"][1], 2)))
         self.edit_position_lon.setText(str(round(status["coordinates"][0], 6)))
         self.edit_position_lat.setText(str(round(status["coordinates"][1], 6)))
+        self.cmd_stream_quality.setText(str(status['cmd_stream_quality']))
 
         for i in range(4):
             self.editswheels[i].setText(str(status["wheels"][i]))

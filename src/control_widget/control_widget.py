@@ -10,6 +10,7 @@ from collections import deque
 import itertools
 import jsonpickle
 import os
+import random
 import socket
 import struct
 import time
@@ -94,6 +95,8 @@ class JoystickControlWidget(QtWidgets.QWidget):
 		self.cmd_socket = None
 		self.cmd_server_addr = None
 		self._open_command_socket()
+
+		self.next_packet_id = random.randint(0, 2**31)
 
 		self.timer = QtCore.QTimer()
 		self.timer.setSingleShot(5000)
@@ -344,7 +347,7 @@ class JoystickControlWidget(QtWidgets.QWidget):
 			if slave_nr >= 0:
 				self.slaves[slave_nr].add_change(value)
 
-		commands = b''
+		commands = struct.pack('I', self.next_packet_id)
 		for slave in self.slaves:
 			cmd, axis, val = slave.execute()
 			if cmd == MoveCommand.NOP:
@@ -354,10 +357,11 @@ class JoystickControlWidget(QtWidgets.QWidget):
 				axis = 0
 			commands += struct.pack('Bhf', cmd, axis, val)
 
-			print(cmd, axis, val)
+			# print(cmd, axis, val)
 
-		if len(commands) > 0:
+		if len(commands) > 4:
 			# print('commands: {}'.format(commands))
 			self.cmd_socket.sendto(commands, self.cmd_server_addr)
-
+			self.next_packet_id += 1
+	
 		self.timer.start(40)
