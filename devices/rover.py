@@ -716,7 +716,7 @@ class RoverWorker(DeviceWorker):
         set(arm_lower, self.encoders[arm_lower] + 153.8 + 7.3 - self.index_pulses[arm_lower])
         set(arm_upper, self.encoders[arm_upper] + 117.7 - 2.4 - self.index_pulses[arm_upper])
         set(grip_lat, self.encoders[grip_lat] + 152.0 - 3.2 - self.index_pulses[grip_lat])
-        set(arm_rot, self.encoders[arm_rot] + 152 - self.index_pulses[arm_rot])
+        set(arm_rot, self.encoders[arm_rot] + 300 - self.index_pulses[arm_rot])
 
     @remote
     def get_encoders(self):
