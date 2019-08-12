@@ -352,7 +352,7 @@ class JoystickControlWidget(QtWidgets.QWidget):
 
 			if axis is None:
 				axis = 0
-			commands += struct.pack('Bhf', cmd, axis, val_s16)
+			commands += struct.pack('Bhf', cmd, axis, val)
 
 			print(cmd, axis, val)
 
