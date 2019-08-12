@@ -135,8 +135,6 @@ class Routes(QGroupBox):
 		else:
 			self.routes[self.selected_route].append(task)
 
-		print('adding {}'.format(task))
-
 		self._refresh_nodes();
 
 		self._publish_route()

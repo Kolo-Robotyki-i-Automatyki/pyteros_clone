@@ -9,18 +9,54 @@ of Ultrafast MagnetoSpectroscopy at Faculty of Physics, University of Warsaw
 """
 
 from PyQt5 import Qt,QtCore,QtGui,QtWidgets
-import time
+
 import devices
+import importlib
+import time
 
 class NoRequiredDevicesError(Exception):
     """Error raised if no devices required for given feature is found."""
     pass
+
+
+PAGES = {
+    'Pad control': 'devices.misc.joystick_control.JoystickControlWidget',
+    'Pad control [UDP]': 'src.control_widget.control_widget.JoystickControlWidget',
+    # 'Pad 2 control': 'devices.misc.joystic_control2.JoystickControlWidget',
+    'Map': 'src.map_widget.map_widget.MapWidget',
+    'Map [new]': 'src.map_widget_new.map_widget.MapWidget',
+    'IK Scripter': 'devices.misc.ik_scripter.IKScripterWidget',
+    'Cameras': 'src.streaming_widget.streaming_widget.StreamingWidget',
+    'Autonomy': 'src.path_widget.path_widget.PathCreator',
+}
+
+
+def create_obj_from_path(class_path, *args, **kwargs):
+    module_name, class_name = class_path.rsplit('.', 1)
+    imported_module = importlib.import_module(module_name)
+    class_obj = getattr(imported_module, class_name)
+    return class_obj(*args, **kwargs)
+
+
+class RestartAction(QtWidgets.QAction):
+    def __init__(self, page_name, window, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.page_name = page_name
+        self.window = window
+        self.setText(page_name)
+        self.triggered.connect(self._restart_page)
+
+    def _restart_page(self):
+        self.window.restart_page(self.page_name)
+
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.createCentralWidget()
         self.setupIcons()
+
+        self.tabs = {}
         
         quitAct = QtWidgets.QAction("&Quit", self);
         quitAct.setShortcuts(QtGui.QKeySequence.Quit)
@@ -28,6 +64,12 @@ class MainWindow(QtWidgets.QMainWindow):
         quitAct.triggered.connect(self.close)
         fileMenu = self.menuBar().addMenu("&File")
         fileMenu.addAction(quitAct)
+
+        pages_menu = self.menuBar().addMenu('Restart')
+        for page_name in PAGES:
+            restart_act = RestartAction(page_name=page_name, window=self, parent=self)
+            pages_menu.addAction(restart_act)
+
         self.controlMenu = self.menuBar().addMenu("&Devices")
         self.setGeometry(100, 40, self.width(), 1000)
     
@@ -63,11 +105,23 @@ class MainWindow(QtWidgets.QMainWindow):
         #""" Creates and returns the widget to control slave processes """
         #scrollArea = QtWidgets.QScrollArea()
         #scrollArea.setWidget(widget)
-        
-    
-    
-    def addPage(self, widget, name):
-        self.tabWidget.addTab(widget, name)
+
+    def restart_page(self, page_name):
+        prev_idx = self.tabWidget.count()
+        for i in range(self.tabWidget.count()):
+            if self.tabWidget.tabText(i) == page_name:
+                prev_idx = i
+                self.tabWidget.removeTab(i)
+                break
+
+        try:
+            class_path = PAGES[page_name]
+            tab_widget = create_obj_from_path(class_path, devices.active_devices)
+            self.tabWidget.insertTab(prev_idx, tab_widget, page_name)
+        except NoRequiredDevicesError:
+            pass
+        except Exception as e:
+            traceback.print_exc(file=sys.stdout)
     
     def createCentralWidget(self):
         self.tabWidget = QtWidgets.QTabWidget()
@@ -108,73 +162,8 @@ if __name__ == '__main__':
             except Exception as e:
                 traceback.print_exc(file=sys.stdout)
 
-        try:
-            from devices.misc import joystick_control
-            w = joystick_control.JoystickControlWidget(devices.active_devices)
-            window.addPage(w, "Pad control")
-        except NoRequiredDevicesError:
-            pass
-        except Exception as e:
-            traceback.print_exc(file=sys.stdout)
-            
-        try:
-            from src.control_widget import control_widget
-            w = control_widget.JoystickControlWidget(devices.active_devices)
-            window.addPage(w, "Pad control [experimental]")
-        except NoRequiredDevicesError:
-            pass
-        except Exception as e:
-            traceback.print_exc(file=sys.stdout)
-
-        '''try:
-            from devices.misc import joystick_control2
-            w = joystick_control2.JoystickControlWidget(devices.active_devices)
-            window.addPage(w, "Pad 2 control")
-        except NoRequiredDevicesError:
-            pass
-        except Exception as e:
-            traceback.print_exc(file=sys.stdout)'''
-
-        try:
-            from src.map_widget import map_widget
-            w = map_widget.MapWidget(devices.active_devices)
-            window.addPage(w, "Map")
-        except NoRequiredDevicesError:
-            pass
-        except Exception as e:
-            traceback.print_exc(file=sys.stdout)
-
-        try:
-            from src.map_widget_new import map_widget
-            w = map_widget.MapWidget(devices.active_devices)
-            window.addPage(w, "Map new")
-        except NoRequiredDevicesError:
-            pass
-        except Exception as e:
-            traceback.print_exc(file=sys.stdout)
-
-        try:
-            from devices.misc import ik_scripter
-            w = ik_scripter.IKScripterWidget(devices.active_devices)
-            window.addPage(w, "IK Scripter")
-        except NoRequiredDevicesError:
-            pass
-        except Exception as e:
-            traceback.print_exc(file=sys.stdout)
-
-        try:
-            from src.streaming_widget import streaming_widget
-            streaming_widget = streaming_widget.StreamingWidget(devices.active_devices)
-            window.addPage(streaming_widget, "Cameras")
-        except Exception as e:
-            traceback.print_exc(file=sys.stdout)
-
-        try:
-            from src.path_widget import path_widget
-            widget = path_widget.PathCreator(devices.active_devices)
-            window.addPage(widget, "Autonomy")
-        except Exception as e:
-            traceback.print_exc(file=sys.stdout)
+        for page_name in PAGES:
+            window.restart_page(page_name)
 
         window.show()
         app.exec_()
