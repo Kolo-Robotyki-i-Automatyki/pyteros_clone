@@ -7,10 +7,13 @@ of Ultrafast MagnetoSpectroscopy at Faculty of Physics, University of Warsaw
 
 from PyQt5 import QtCore
 import zmq
-import json
-from . import device
-import numpy as np
+
 import base64
+import json
+import numpy as np
+
+from . import device
+from src.common.misc import *
 
 
 def remote(func):
@@ -143,7 +146,8 @@ class DeviceWorker(Process):
         self.mutex_for_pubchannel.unlock()
 
     def run(self):
-        print("starting process")
+        print('[DeviceWorker] running {}'.format(self.__class__))
+
         self.mutex_for_pubchannel = QtCore.QMutex()
         context = zmq.Context(1)
         server = context.socket(zmq.REP)

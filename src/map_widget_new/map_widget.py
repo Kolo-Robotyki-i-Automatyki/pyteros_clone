@@ -7,6 +7,7 @@ from src.map_widget_new.routes_widget import Routes
 from src.map_widget_new.photo_loader_widget import PhotoLoader
 from src.map_widget_new.pins_widget import Pins
 
+from DeviceServerHeadless import get_devices, get_proxy
 from devices.rover import Rover
 from src.common.settings import Settings
 
@@ -17,11 +18,11 @@ class MapWidget(QWidget):
 	rover_updated = pyqtSignal(object, float)
 	autonomy_updated = pyqtSignal(dict)
 
-	def __init__(self, active_devices, parent=None):
+	def __init__(self, parent=None):
 		super().__init__(parent)
 
 		self.rover = None
-		for name, dev in active_devices.items():
+		for name, dev in { dev.name: get_proxy(dev) for dev in get_devices() }.items():
 			if isinstance(dev, Rover):
 				self.rover = dev
 				break

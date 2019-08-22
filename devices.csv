@@ -1,0 +1,3 @@
+Rover,devices.rover.RoverWorker,devices.rover.Rover
+XBox pad,devices.misc.xbox.XBoxWorker,devices.misc.xbox.XBoxPad
+Camera server,devices.cameras.CameraServerWorker,devices.cameras.CameraServer

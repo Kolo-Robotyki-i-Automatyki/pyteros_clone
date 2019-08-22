@@ -8,6 +8,7 @@ from typing import List
 import subprocess
 
 from devices.cameras import CameraServer
+from DeviceServerHeadless import get_devices, get_proxy
 from src.common.settings import Settings
 import time
 
@@ -376,12 +377,12 @@ class DeviceLoader(QObject):
 
 
 class StreamingWidget(QWidget):
-    def __init__(self, connected_devices={}, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
 
         self.camera_servers = []
         try:
-            for name, dev in {k: v for k, v in connected_devices.items() if isinstance(v, CameraServer)}.items():
+            for name, dev in {k: v for k, v in { dev.name: get_proxy(dev) for dev in get_devices() }.items() if isinstance(v, CameraServer)}.items():
                 self.camera_servers.append(dev)
                 print('[streaming] detected camera server "{}"'.format(name))
         except Exception as e:

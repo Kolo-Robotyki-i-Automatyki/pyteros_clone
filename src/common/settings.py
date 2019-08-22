@@ -3,31 +3,37 @@ import os
 import sys
 
 
-SETTINGS_DIR = os.path.expanduser('~/pyteros_settings')
+USER_SETTINGS_DIR = 'config'
+DEFAULT_SETTINGS_DIR = os.path.join(USER_SETTINGS_DIR, 'default')
 
 
 class Settings:
 	def __init__(self, name: str):
-		if not os.path.exists(SETTINGS_DIR):
-			os.makedirs(SETTINGS_DIR)
+		self.config_default = os.path.join(DEFAULT_SETTINGS_DIR, name)
+		self.config_user = os.path.join(USER_SETTINGS_DIR, name)
 
-		self.filename = os.path.join(SETTINGS_DIR, name)
-		if not os.path.exists(self.filename):
-			with open(self.filename, 'a') as f:
-				pass
-			with open(self.filename, 'w') as f:
-				f.write('{}')
+		self.cache = None
 
-		self.cache = {}
-		with open(self.filename, 'r') as f:
+		if os.path.exists(self.config_user):
 			try:
-				self.cache = json.load(f)
+				with open(self.config_user, 'r') as f:
+					self.cache = json.load(f)
 			except Exception as e:
-				print(e)
+				print('loading settings for "{}": {}'.format(name, e))
+
+		if self.cache is None:
+			if os.path.exists(self.config_default):
+				with open(self.config_default, 'r') as f:
+					self.cache = json.load(f)
+			else:
 				self.cache = {}
 
+			with open(self.config_user, 'a') as f:
+				pass
+			self.save()
+
 	def save(self):		
-		with open(self.filename, 'w') as f:
+		with open(self.config_user, 'w') as f:
 			json.dump(self.cache, f)
 
 	def set(self, key, val, save=True):

@@ -7,6 +7,7 @@ from PyQt5 import QtCore,QtWidgets,QtGui
 import PyQt5
 import jsonpickle
 import time
+from DeviceServerHeadless import get_devices, get_proxy
 from ..rover import Rover
 
 dead_zone = 0.15
@@ -14,9 +15,9 @@ dead_zone = 0.15
 class IKScripterWidget(QtWidgets.QWidget):
     """ A widget for interactive control of APT motors or attocube axes using XBoxPad """
     
-    def __init__(self, slave_devices=[], parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.device_list = slave_devices
+        self.device_list = { dev.name: get_proxy(dev) for dev in get_devices() }
         self.rover = None
         try:
             for rovername, rover in {k: v for k, v in self.device_list.items() if isinstance(v, Rover)}.items():

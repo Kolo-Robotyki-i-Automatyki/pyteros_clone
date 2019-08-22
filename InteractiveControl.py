@@ -10,6 +10,9 @@ of Ultrafast MagnetoSpectroscopy at Faculty of Physics, University of Warsaw
 
 from PyQt5 import Qt,QtCore,QtGui,QtWidgets
 
+from DeviceServerHeadless import *
+from src.common.misc import create_obj_from_path
+
 import devices
 import importlib
 import time
@@ -20,6 +23,7 @@ class NoRequiredDevicesError(Exception):
 
 
 PAGES = {
+    'Devices': 'src.devices_widget.devices_widget.DevicesWidget',
     'Pad control': 'devices.misc.joystick_control.JoystickControlWidget',
     'Pad control [UDP]': 'src.control_widget.control_widget.JoystickControlWidget',
     # 'Pad 2 control': 'devices.misc.joystic_control2.JoystickControlWidget',
@@ -29,13 +33,6 @@ PAGES = {
     'Cameras': 'src.streaming_widget.streaming_widget.StreamingWidget',
     'Autonomy': 'src.path_widget.path_widget.PathCreator',
 }
-
-
-def create_obj_from_path(class_path, *args, **kwargs):
-    module_name, class_name = class_path.rsplit('.', 1)
-    imported_module = importlib.import_module(module_name)
-    class_obj = getattr(imported_module, class_name)
-    return class_obj(*args, **kwargs)
 
 
 class RestartAction(QtWidgets.QAction):
@@ -98,13 +95,7 @@ class MainWindow(QtWidgets.QMainWindow):
         ipython_widget = widget
         ipython_widget.show()
         self.kernel_client = kernel_client
-        #kernel_client.execute("import devices.demo.demo")
         return widget
-    
-    #def createProcessControlTab(self):
-        #""" Creates and returns the widget to control slave processes """
-        #scrollArea = QtWidgets.QScrollArea()
-        #scrollArea.setWidget(widget)
 
     def restart_page(self, page_name):
         prev_idx = self.tabWidget.count()
@@ -116,7 +107,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         try:
             class_path = PAGES[page_name]
-            tab_widget = create_obj_from_path(class_path, devices.active_devices)
+            tab_widget = create_obj_from_path(class_path)
             self.tabWidget.insertTab(prev_idx, tab_widget, page_name)
         except NoRequiredDevicesError:
             pass
@@ -127,7 +118,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tabWidget = QtWidgets.QTabWidget()
         self.setCentralWidget(self.tabWidget)
         self.tabWidget.addTab(self.createConsoleTab(), "Console")
-        #self.tabWidget.addTab(self.createProcessControlTab, "Devices")
         
 
     def setupIcons(self):
@@ -148,17 +138,16 @@ if __name__ == '__main__':
         window = MainWindow()
         window.show()
         
-        devices.load_devices(use_gui=True, parent=window)
-        window.kernel_client.execute('import devices')
-        window.kernel_client.execute('devices.load_devices()')
-        window.kernel_client.execute('globals().update(devices.active_devices)')
-        window.kernel_client.execute('print(list(devices.active_devices))')
+        window.kernel_client.execute('from DeviceServerHeadless import *')
+        window.kernel_client.execute('globals().update({dev.name: get_proxy(dev) for dev in get_devices()})')
+        window.kernel_client.execute('print([dev.name for dev in get_devices()])')
         window.kernel_client.execute('import time')
         window.kernel_client.execute('import numpy as np')
         
-        for _,device in devices.active_devices.items():
+        for dev in get_devices():
             try:
-                device.createDock(window, window.controlMenu)
+                interface = get_proxy(dev)
+                interface.createDock(window, window.controlMenu)
             except Exception as e:
                 traceback.print_exc(file=sys.stdout)
 

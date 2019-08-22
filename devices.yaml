@@ -1,3 +1,5 @@
+
+
 motors:
   name: Rover
   host: 10.1.1.200
@@ -8,7 +10,7 @@ motors:
 
 xbox1:
   name: XBox1
-  host: localhost
+  host: 10.1.1.200
   req_port: 7004
   pub_port: 7005
   client_class: misc.xbox.XBoxPad

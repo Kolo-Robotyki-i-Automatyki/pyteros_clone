@@ -3,6 +3,7 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 from devices.rover import Rover
 from devices.reach_tcp import Reach
 from devices.imu_get import Orientation
+from DeviceServerHeadless import get_devices, get_proxy
 
 import math
 import random
@@ -74,13 +75,13 @@ class Canvas(QtWidgets.QWidget):
 
 
 class PathCreator(QtWidgets.QWidget):
-    def __init__(self, connected_devices={}, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
 
         # todo change this (?)
         self.rover = None
         try:
-            for name, dev in {k: v for k, v in connected_devices.items() if isinstance(v, Rover)}.items():
+            for name, dev in {k: v for k, v in { dev.name: get_proxy(dev) for dev in get_devices() }.items() if isinstance(v, Rover)}.items():
                 self.rover = dev
                 break
             else:

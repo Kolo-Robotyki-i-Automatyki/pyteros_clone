@@ -4,6 +4,7 @@
 import os
 from PyQt5 import QtCore, QtWidgets, QtGui
 import jsonpickle
+from DeviceServerHeadless import get_devices, get_proxy
 from ..misc.xbox import XBoxPad
 import time
 from collections import deque
@@ -96,9 +97,9 @@ class Slave():
 class JoystickControlWidget(QtWidgets.QWidget):
     """ A widget for interactive control of APT motors or attocube axes using XBoxPad """
 
-    def __init__(self, slave_devices=[], parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.device_list = slave_devices
+        self.device_list = { dev.name: get_proxy(dev) for dev in get_devices() }
         self.xbox = None
         try:
             for xboxname, xbox in {k: v for k, v in self.device_list.items() if isinstance(v, XBoxPad)}.items():

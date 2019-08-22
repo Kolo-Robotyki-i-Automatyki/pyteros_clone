@@ -5,6 +5,7 @@ from PyQt5.QtGui import *
 
 from devices.misc.xbox import XBoxPad
 from devices.rover import Rover, MoveCommand
+from DeviceServerHeadless import get_devices, get_proxy
 
 from collections import deque
 import itertools
@@ -80,9 +81,9 @@ class Slave():
 class JoystickControlWidget(QtWidgets.QWidget):
 	""" A widget for interactive control of APT motors or attocube axes using XBoxPad """
 
-	def __init__(self, slave_devices=[], parent=None):
+	def __init__(self, parent=None):
 		super().__init__(parent)
-		self.device_list = slave_devices
+		self.device_list = { dev.name: get_proxy(dev) for dev in get_devices() }
 		
 		self.xbox = None
 		try:

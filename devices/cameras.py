@@ -48,15 +48,16 @@ class CameraServerWorker(DeviceWorker):
 	def __init__(self, req_port=DEFAULT_REQ_PORT, pub_port=DEFAULT_PUB_PORT, **kwargs):
 		super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
 
+		self.devices = {}
+
+	def init_device(self):
 		if not os.path.exists(VIDEO_FILES_DIR):
 		    os.makedirs(VIDEO_FILES_DIR)
 
 		self.lock = threading.Lock()
-		self.devices = {}
-
 		self._discover_devices()
 
-		subprocess.run(['pkill', '"gst-launch"'], shell=False)
+		subprocess.run(['pkill', '"gst-launch"'], shell=True)
 
 	def status(self):
 		with self.lock:
@@ -192,7 +193,7 @@ class CameraServerWorker(DeviceWorker):
 	def _discover_devices(self):
 		devices = []
 	
-		list_devices_process = subprocess.run(['v4l2-ctl', '--list-devices'], stdout=subprocess.PIPE)
+		list_devices_process = subprocess.run(['v4l2-ctl', '--list-devices'], stdout=subprocess.PIPE, shell=True)
 		for line in list_devices_process.stdout.decode('utf-8').split('\n'):
 			if len(line.strip()) == 0:
 				continue

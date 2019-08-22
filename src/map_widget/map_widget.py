@@ -1,6 +1,7 @@
 
 from src.map_widget.sample_image_item import SampleImageItem
 from devices.rover import Rover,relative_position_default_origin
+from DeviceServerHeadless import get_devices, get_proxy
 
 import os
 import scipy as sp
@@ -115,9 +116,9 @@ def _create_can_poll(can, name, axis):
 
 
 class MapWidget(QtWidgets.QWidget):
-    def __init__(self, device_list, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.device_list = device_list
+        self.device_list = { dev.name: get_proxy(dev) for dev in get_devices() }
         self.slaves = []
         self.pools = []
         self.bg_item = None
