@@ -8,24 +8,23 @@ of Ultrafast MagnetoSpectroscopy at Faculty of Physics, University of Warsaw
 
 """
 
-from PyQt5 import Qt,QtCore,QtGui,QtWidgets
+from PyQt5 import Qt, QtCore, QtGui, QtWidgets
 
-from DeviceServerHeadless import DeviceServer
+from DeviceServerHeadless import DeviceServer, DeviceType, DeviceServerWrapper
 from src.common.misc import create_obj_from_path
 
-import devices
 import importlib
+import sys
+import threading
 import time
-
-class NoRequiredDevicesError(Exception):
-    """Error raised if no devices required for given feature is found."""
-    pass
+import traceback
+import zmq
 
 
 PAGES = {
     'Devices': 'src.devices_widget.devices_widget.DevicesWidget',
     'Pad control': 'devices.misc.joystick_control.JoystickControlWidget',
-    # 'Pad control [UDP]': 'src.control_widget.control_widget.JoystickControlWidget',
+    'Control config': 'src.control_widget.control_widget_new.ControlConfigWidget',
     # 'Pad 2 control': 'devices.misc.joystic_control2.JoystickControlWidget',
     'Map': 'src.map_widget.map_widget.MapWidget',
     'Map [new]': 'src.map_widget_new.map_widget.MapWidget',
@@ -49,6 +48,11 @@ class RestartAction(QtWidgets.QAction):
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
+
+        self.zmq_context = zmq.Context()
+
+        self.device_server = DeviceServerWrapper(self.zmq_context)
+
         self.createCentralWidget()
         self.setupIcons()
 
@@ -68,7 +72,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.controlMenu = self.menuBar().addMenu("&Devices")
         self.setGeometry(100, 40, self.width(), 1000)
-    
+
     def createConsoleTab(self):
         """ Initialize a python console and return its widget """
         from qtconsole.rich_jupyter_widget import RichJupyterWidget
@@ -106,18 +110,18 @@ class MainWindow(QtWidgets.QMainWindow):
 
         try:
             class_path = PAGES[page_name]
-            tab_widget = create_obj_from_path(class_path)
-            self.tabWidget.insertTab(prev_idx, tab_widget, page_name)
-        except NoRequiredDevicesError:
-            pass
+            tab_widget = create_obj_from_path(class_path, self.device_server)
         except Exception as e:
-            traceback.print_exc(file=sys.stdout)
+            error_msg = traceback.format_exc()
+            tab_widget = QtWidgets.QLabel(error_msg)
+            tab_widget.setStyleSheet('QLabel { color : red; }')
     
+        self.tabWidget.insertTab(prev_idx, tab_widget, page_name)    
+
     def createCentralWidget(self):
         self.tabWidget = QtWidgets.QTabWidget()
         self.setCentralWidget(self.tabWidget)
         self.tabWidget.addTab(self.createConsoleTab(), "Console")
-        
 
     def setupIcons(self):
         self.trayIconMenu = QtWidgets.QMenu(self);
@@ -128,20 +132,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setWindowIcon(icon)
         self.setWindowTitle("pyLUMS - Interactive control")
 
-    
+
 
 if __name__ == '__main__':
-    import sys,traceback
     def run_app():
         app = QtWidgets.QApplication(sys.argv)
         window = MainWindow()
         window.show()
         
-        window.kernel_client.execute('from DeviceServerHeadless import *')
-        # window.kernel_client.execute('device_server = DeviceServer()')
-        # window.kernel_client.execute('interfaces = {dev.name: dev.interface() for dev in device_server.devices()}')
-        # window.kernel_client.execute('globals().update(interfaces)')
-        # window.kernel_client.execute('print([name for name, _ in interfaces.items()])')
         window.kernel_client.execute('import time')
         window.kernel_client.execute('import numpy as np')
         

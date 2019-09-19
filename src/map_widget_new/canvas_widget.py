@@ -13,10 +13,10 @@ TRACE_RESOLUTION = 1.0
 
 # an arrow representing the rover
 arrow_shape = QPolygonF([
-    QPointF(  0, -14),
-    QPointF(-12,  14),
-    QPointF(  0,   6),
-    QPointF( 12,  14)]
+	QPointF(  0, -14),
+	QPointF(-12,  14),
+	QPointF(  0,   6),
+	QPointF( 12,  14)]
 )
 
 
@@ -114,22 +114,22 @@ class Canvas(QWidget):
 
 		# map
 		for image, ((top, left), (bottom, right)) in self.images:
-		    left, top     = self._pos_to_xy((top, left))
-		    right, bottom = self._pos_to_xy((bottom, right))
+			left, top     = self._pos_to_xy((top, left))
+			right, bottom = self._pos_to_xy((bottom, right))
 
-		    if left > canvas_width or right < 0 or top > canvas_height or bottom < 0:
-		        continue
+			if left > canvas_width or right < 0 or top > canvas_height or bottom < 0:
+				continue
 
-		    img_rect = QRect(left, top, math.ceil(right - left), math.ceil(bottom - top))
-		    painter.drawImage(img_rect, image)
+			img_rect = QRect(left, top, math.ceil(right - left), math.ceil(bottom - top))
+			painter.drawImage(img_rect, image)
 
 		# trace
 		painter.setPen(QPen(QColor.fromRgb(125, 190, 255), 3))
 		if len(self.rover_trace) > 0:
-		    trace_xy = [self._pos_to_xy(pos) for pos in self.rover_trace]
-		    trace_xy.append(self._pos_to_xy(self.rover_pos))
-		    for (a, b) in zip(trace_xy[:-1], trace_xy[1:]):
-		        painter.drawLine(QPointF(a[0], a[1]), QPointF(b[0], b[1]))
+			trace_xy = [self._pos_to_xy(pos) for pos in self.rover_trace]
+			trace_xy.append(self._pos_to_xy(self.rover_pos))
+			for (a, b) in zip(trace_xy[:-1], trace_xy[1:]):
+				painter.drawLine(QPointF(a[0], a[1]), QPointF(b[0], b[1]))
 
 		# routes
 		route_xy = [self._pos_to_xy(node) for node in self.route]

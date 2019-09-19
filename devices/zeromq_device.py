@@ -15,9 +15,6 @@ import zmq
 from src.common.misc import NumpyArrayEncoder, NumpyArrayDecoder, unique_id
 
 
-CONTEXT = zmq.Context()
-CONTEXT.setsockopt(zmq.LINGER, 0)
-
 REQUEST_TIMEOUT_MS = 2000
 
 
@@ -51,7 +48,12 @@ def _makeFun(method_name):
         
         poller = zmq.Poller()
         poller.register(self.client_socket, zmq.POLLIN)
-        events = dict(poller.poll(timeout=REQUEST_TIMEOUT_MS))
+
+        try:
+            events = dict(poller.poll(timeout=REQUEST_TIMEOUT_MS))
+        except:
+            traceback.print_exc()
+            raise ConnectionError
 
         if events.get(self.client_socket) == zmq.POLLIN:
             response = self.client_socket.recv_json(cls=NumpyArrayDecoder)
@@ -150,7 +152,7 @@ class PeriodicTask:
 
                     next_tick = next_tick + period
                     if time_now >= next_tick:
-                        print('task "{}" is taking too long'.format(target.__name__), file=sys.stderr)
+                        print('task "{}" is taking too long'.format(worker.__name__), file=sys.stderr)
                         next_tick = time_now
                     poll_timeout = 0
                 else:
@@ -333,7 +335,7 @@ class DeviceWorker:
         self.stderr = Capture(sys.stderr)
         sys.stderr = self.stderr
 
-        print('running device {}'.format(self.__class__.__name__))
+        print('running {}'.format(self.__class__.__name__))
 
         self.publish_lock = threading.Lock()
 
@@ -349,14 +351,35 @@ class DeviceWorker:
         self.poller = zmq.Poller()
         self.poller.register(self.server_socket, zmq.POLLIN)
 
+        self._main_loop()
 
-        print('calling init_device()')
+        for timer in self.timer_callbacks.keys():
+            timer.stop()
+
+        for task in self.periodic_task_callbacks.keys():
+            task.stop()
+
+        for task in self.background_task_callbacks.keys():
+            task.close()
+
+        for socket in self.socket_callbacks.keys():
+            socket.close()
+
+        self.publisher_socket.close()
+        self.server_socket.close()
+
+        self.zmq_context.term()
+
+        print('worker {} quits'.format(self.__class__.__name__))
+
+    def _main_loop(self):
+        print('{}.init_device()'.format(self.__class__.__name__))
         try:
             self.init_device()
         except:
             traceback.print_exc()
+            return
 
-        print('starting the refresh timer')
         self.start_timer(self._refresh, self.refresh_period)
 
         while self.should_continue:
@@ -409,37 +432,11 @@ class DeviceWorker:
                     message = socket.recv_json(cls=NumpyArrayDecoder)
                     callback(message)
 
-        print('calling destroy_device()')
+        print('{}.destroy_device()'.format(self.__class__.__name__))
         try:
             self.destroy_device()
         except:
             traceback.print_exc()
-
-
-        print('stopping timers')
-        for timer in self.timer_callbacks.keys():
-            timer.stop()
-
-        print('stopping other periodic tasks')
-        for task in self.periodic_task_callbacks.keys():
-            task.stop()
-
-        print('waiting for background tasks to complete')
-        for task in self.background_task_callbacks.keys():
-            task.close()
-
-        print('closing dynamically bound sockets')
-        for socket in self.socket_callbacks.keys():
-            socket.close()
-
-        print('closing other sockets')
-        self.publisher_socket.close()
-        self.server_socket.close()
-
-        print('destroying the zmq context')
-        self.zmq_context.term()
-
-        print('finally the whole process quits')
 
     def _handle_server_request(self):
         try:
@@ -518,12 +515,12 @@ class DeviceWorker:
 
 @include_remote_methods(DeviceWorker)
 class DeviceInterface:
-    def __init__(self, req_port: int, pub_port: int, host="localhost", zmq_context = None):
+    def __init__(self, zmq_context, req_port: int, pub_port: int, host="localhost"):
         self.host = host
         self.pub_port = pub_port
         self.req_port = req_port
 
-        self.zmq_context = zmq_context or CONTEXT
+        self.zmq_context = zmq_context
 
         self.client_socket = self.zmq_context.socket(zmq.REQ)
         self.client_socket.connect('tcp://{}:{}'.format(host, req_port))
@@ -539,10 +536,11 @@ class DeviceInterface:
 
     def close(self):
         """Closes the interface"""
-        self.open = False
-        for listener in self.listeners:
-            listener.stop()
-        self.client_socket.close()
+        if self.open:
+            self.open = False
+            for listener in self.listeners:
+                listener.stop()
+            self.client_socket.close()
 
     class Subscriber:
         def __init__(self, zmq_context, callback, topics, host, pub_port):
@@ -564,7 +562,11 @@ class DeviceInterface:
                 poller.register(control_socket, zmq.POLLIN)
 
                 while True:
-                    events = dict(poller.poll())
+                    try:
+                        events = dict(poller.poll())
+                    except zmq.ZMQError:
+                        traceback.print_exc()
+                        break
 
                     if events.get(control_socket) == zmq.POLLIN:
                         _ = control_socket.recv()
@@ -573,7 +575,10 @@ class DeviceInterface:
                     if events.get(subscriber_socket) == zmq.POLLIN:
                         msg = subscriber_socket.recv_json(cls=NumpyArrayDecoder)
                         if msg.get('topic') in topics:
-                            callback(msg.get('contents'))
+                            try:
+                                callback(msg.get('contents'))
+                            except:
+                                traceback.print_exc()
 
                 control_socket.close()
                 subscriber_socket.close()

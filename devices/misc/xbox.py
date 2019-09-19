@@ -7,32 +7,36 @@ from inputs import devices
 from ..zeromq_device import DeviceWorker, DeviceInterface, remote, include_remote_methods
 
 
+XBOX_AXES = {
+    'ABS_X': 'l_thumb_x',
+    'ABS_Y': 'l_thumb_y',
+    'ABS_RX': 'r_thumb_x',
+    'ABS_RY': 'r_thumb_y',
+    'ABS_Z': 'left_trigger',
+    'ABS_RZ': 'right_trigger',
+    'ABS_HAT0X': 'button4',
+    'ABS_HAT0Y': 'button1',
+    'BTN_SELECT': 'button5',
+    'BTN_START': 'button6',
+    'BTN_THUMBL': 'button7',
+    'BTN_THUMBR': 'button8',
+    'BTN_NORTH': 'button16',
+    'BTN_SOUTH': 'button13',
+    'BTN_EAST': 'button14',
+    'BTN_WEST': 'button15',
+    'BTN_TL': 'button9',
+    'BTN_TR': 'button10'
+}
+
+
 class XBoxWorker(DeviceWorker):
 
-    def __init__(self, req_port, pub_port, refresh_period=0.1, id=0, reversed=False, **kwargs):
+    def __init__(self, req_port, pub_port, refresh_period=0.05, id=0, reversed=False, **kwargs):
         super().__init__(req_port=req_port, pub_port=pub_port, refresh_period=refresh_period, **kwargs)
         self.device_number = int(id)
         self.refresh_period = refresh_period
         self.reversed = reversed
-        self.axes = {
-            'ABS_X': 'l_thumb_x',
-            'ABS_Y': 'l_thumb_y',
-            'ABS_RX': 'r_thumb_x',
-            'ABS_RY': 'r_thumb_y',
-            'ABS_Z': 'left_trigger',
-            'ABS_RZ': 'right_trigger',
-            'ABS_HAT0X': 'button4',
-            'ABS_HAT0Y': 'button1',
-            'BTN_SELECT': 'button5',
-            'BTN_START': 'button6',
-            'BTN_THUMBL': 'button7',
-            'BTN_THUMBR': 'button8',
-            'BTN_NORTH': 'button16',
-            'BTN_SOUTH': 'button13',
-            'BTN_EAST': 'button14',
-            'BTN_WEST': 'button15',
-            'BTN_TL': 'button9',
-            'BTN_TR': 'button10'}
+        self.axes = XBOX_AXES
 
         self.values = {}
         for axis in self.axes:
@@ -91,6 +95,7 @@ class XBoxWorker(DeviceWorker):
         self.gamepad.set_vibration(left_motor, right_motor)
 
     def status(self):
+        # print('xbox status()')
         d = super().status()
 
         state = self.get_state()

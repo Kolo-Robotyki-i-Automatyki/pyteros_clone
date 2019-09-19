@@ -7,7 +7,7 @@ from src.map_widget_new.routes_widget import Routes
 from src.map_widget_new.photo_loader_widget import PhotoLoader
 from src.map_widget_new.pins_widget import Pins
 
-from DeviceServerHeadless import DeviceServer, DeviceType
+from DeviceServerHeadless import DeviceType
 from devices.rover import Rover
 from src.common.misc import *
 from src.common.settings import Settings
@@ -18,33 +18,22 @@ import time
 import traceback
 
 
+RECONNECT_PERIOD_S = 1.0
+
+
 class MapWidget(QWidget):
 	rover_updated = pyqtSignal(object, float)
 	autonomy_updated = pyqtSignal(dict)
 
-	def __init__(self, parent=None):
+	def __init__(self, device_server, parent=None):
 		super().__init__(parent)
 
 		self.lock = threading.Lock()
 
-		self.device_server = DeviceServer()
-		devices_list = self.device_server.devices()
+		self.device_server = device_server
 
 		self.rover = None
-		for dev in devices_list:
-			if dev.dev_type == DeviceType.rover or dev.dev_type == DeviceType.fake_rover:
-				self.rover = dev.interface()
-				break
-		else:
-			print('[map] rover not connected')
-
 		self.autonomy = None
-		for dev in devices_list:
-			if dev.dev_type == DeviceType.autonomy:
-				self.autonomy = dev.interface()
-				break
-		else:
-			print('[map] autonomy not connected')
 
 		self.config = Settings('map_widget')
 
@@ -91,44 +80,46 @@ class MapWidget(QWidget):
 		self.new_rover_status = None
 		self.new_autonomy_status = None
 
-		run_daemon_in_loop(self._fetch_status, delay=0.1)
+		threading.Thread(target=self._discover_devices, daemon=True).start()
+
 		self.update_timer = QTimer()
 		self.update_timer.setSingleShot(False)
 		self.update_timer.setInterval(100)
 		self.update_timer.timeout.connect(self._update_status)
 		self.update_timer.start()
 
+	def _discover_devices(self):
+		while True:
+			try:
+				with self.lock:
+					if self.rover is None:
+						rover = self.device_server.find_device([DeviceType.rover, DeviceType.fake_rover])
+						if rover is not None:
+							self.rover = rover
+							self.rover.create_listener_thread(self._process_rover_status)
+
+					if self.autonomy is None:
+						autonomy = self.device_server.find_device([DeviceType.autonomy])
+						if autonomy is not None:
+							self.autonomy = autonomy
+							self.autonomy.create_listener_thread(self._process_autonomy_status)
+
+			except:
+				traceback.print_exc()
+
+			time.sleep(RECONNECT_PERIOD_S)
+
+	def _process_rover_status(self, rover_status):
+		self.new_rover_status = rover_status
+
+	def _process_autonomy_status(self, autonomy_status):
+		self.new_autonomy_status = autonomy_status
+
 	def _save_config(self):
 		self.config.set('routes', self.routes.get_data(), save=False)
 		self.config.set('pins', self.pins.get_data(), save=False)
 		self.config.set('photos', self.photo_loader.get_data(), save=False)
 		self.config.save()
-
-	def _fetch_status(self):
-		rover_status = None
-		auto_status = None
-
-		try:
-			rover_status = self.rover.status()
-		except AttributeError:
-			pass
-		except:
-			print('[map] failed to fetch rover status')
-			traceback.print_exc()
-
-		try:
-			auto_status = self.autonomy.status()
-		except AttributeError:
-			pass
-		except:
-			print('[map] failed to fetch autonomy status')
-			traceback.print_exc()
-		
-		with self.lock:
-			if rover_status is not None:
-				self.new_rover_status = rover_status
-			if auto_status is not None:
-				self.new_autonomy_status = auto_status
 
 	def _update_status(self):
 		try:

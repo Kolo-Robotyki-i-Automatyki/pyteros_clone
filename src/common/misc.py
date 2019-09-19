@@ -55,36 +55,3 @@ class NumpyArrayDecoder(json.JSONDecoder):
 			return array
 		except:
 			return obj
-
-
-class DaemonController:
-	def __init__(self):
-		self.continue_running = True
-		self.thread = None
-
-	def stop(self):
-		self.continue_running = False
-		try:
-			self.thread.join()
-		except:
-			pass
-
-	def should_run(self):
-		return self.continue_running
-
-def run_daemon_in_loop(worker: typing.Callable, delay: float, args: typing.Tuple = (), kwargs: typing.Dict = {}):
-	controller = DaemonController()
-
-	def wrapper():
-		while controller.should_run():
-			try:
-				worker(*args, **kwargs)
-			except Exception as e:
-				traceback.print_exc()
-				print('Uncaught exception in {}()'.format(worker.__name__))
-			time.sleep(delay)
-
-	controller.thread = threading.Thread(target=wrapper, daemon=True)
-	controller.thread.start()
-
-	return controller

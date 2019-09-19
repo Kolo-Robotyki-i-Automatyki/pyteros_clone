@@ -377,18 +377,15 @@ class DeviceLoader(QObject):
 
 
 class StreamingWidget(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, device_server, parent=None):
         super().__init__(parent)
 
+        self.device_server = device_server
+
         self.camera_servers = []
-        try:
-            devices = DeviceServer().devices()
-            for dev in devices:
-                if dev.dev_type == DeviceType.camera_server:
-                    self.camera_servers.append(dev.interface())
-                    print('[streaming] detected camera server "{}"'.format(dev.name))
-        except Exception as e:
-            print(e)
+        for descr in self.device_server.devices():
+            if descr.dev_type == DeviceServer.camera_server:
+                self.camera_servers.appen(descr.interface())
 
         self.settings = Settings('streaming_widget')
 

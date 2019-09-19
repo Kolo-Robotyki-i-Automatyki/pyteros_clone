@@ -15,17 +15,12 @@ dead_zone = 0.15
 class IKScripterWidget(QtWidgets.QWidget):
     """ A widget for interactive control of APT motors or attocube axes using XBoxPad """
     
-    def __init__(self, parent=None):
+    def __init__(self, device_server, parent=None):
         super().__init__(parent)
-        self.device_list = DeviceServer().devices()
-        self.rover = None
-        try:
-            for dev in self.device_list:
-                if dev.dev_type == DeviceType.rover or dev.dev_type == DeviceType.fake_rover:
-                    self.rover = dev.interface()
-                    break
-        except Exception as e:
-            print(e)
+
+        self.device_server = device_server
+
+        self.rover = device_server.find_device([DeviceType.rover, DeviceType.fake_rover])
         #if self.rover == None:
         #    from src.measurement_tab import NoRequiredDevicesError
         #    raise NoRequiredDevicesError("No rover found")
@@ -97,7 +92,7 @@ class IKScripterWidget(QtWidgets.QWidget):
         self.indexes = {}
         programs = {}
         for file in file_list[2:]:
-            print(file)
+            # print(file)
             if file[-4:] != '.txt':
                 continue
             name = file[0:-4]
@@ -110,7 +105,9 @@ class IKScripterWidget(QtWidgets.QWidget):
             self.indexes[name] = len(self.files)
             self.files.append(name)
             self.list_files.addItem(name)
-        self.rover.update_script_library(programs)
+
+        if self.rover is not None:
+            self.rover.update_script_library(programs)
         if last_file != None:
             self.list_files.setCurrentIndex(self.list_files.currentIndex().sibling(self.indexes[last_file], 0))
 

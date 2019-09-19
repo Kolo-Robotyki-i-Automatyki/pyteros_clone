@@ -1,7 +1,10 @@
-from scipy import optimize
 from PyQt5 import QtWidgets, QtGui, QtCore, QtSvg
+
 from collections import OrderedDict
 import jsonpickle
+import os
+from scipy import optimize
+
 
 class AnchorItem(QtWidgets.QGraphicsItemGroup):
     def __init__(self, parent, real_pos):

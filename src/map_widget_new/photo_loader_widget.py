@@ -56,8 +56,8 @@ class PhotoLoader(QGroupBox):
 
 			for filename in world_files:
 				self._process_single_world_file(path, filename)
-		except Exception as e:
-			print(e)
+		except:
+			traceback.print_exc()
 
 	def _process_single_world_file(self, path, world_file):
 		if world_file in self.loaded_maps.keys():

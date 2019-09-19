@@ -14,8 +14,6 @@ MIN_SCRIPT_WAIT_TIME = 10.0
 DEVICE_DISCOVERY_PERIOD = 3.0
 MAIN_LOOP_PERIOD = 0.1
 
-MAX_FAILED_CONNNECTIONS = 3
-
 
 class Task(IntEnum):
     DRIVE_TO = 1
@@ -183,27 +181,29 @@ class AutonomyWorker(DeviceWorker):
     def __init__(self, req_port, pub_port, **kwargs):
         super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
 
+        self.lock = None
+
         self.rover = None
         self.core = None
         self.reconnect_thread = None
         self.run_thread = None
 
-        self.failed_connections = 0
-
     def init_device(self):
-        from DeviceServerHeadless import DeviceServer
+        from DeviceServerHeadless import DeviceServerWrapper
 
-        self.device_server = DeviceServer(self.zmq_context)
+        self.lock = threading.Lock()
+
+        self.device_server = DeviceServerWrapper(self.zmq_context)
         self.core = AutonomyCore()
-        self.reconnect_thread = self.start_periodic_task(self._find_rovers, self._reconnect, DEVICE_DISCOVERY_PERIOD)
+        self.reconnect_timer = self.start_timer(self._find_rovers, DEVICE_DISCOVERY_PERIOD)
         self.run_thread = self.start_timer(self._auto_step, MAIN_LOOP_PERIOD)
 
     def destroy_device(self):
         self.run_thread.stop()
-        self.reconnect_thread.stop()
-        self.device_server.close()
+        self.reconnect_timer.stop()
         if self.rover is not None:
             self.rover.close()
+        self.device_server.close()
 
     def status(self):
         status = self.core.get_status()
@@ -211,45 +211,13 @@ class AutonomyWorker(DeviceWorker):
         return status
 
     def _find_rovers(self):
-        from DeviceServerHeadless import DeviceType, DeviceServer
+        from DeviceServerHeadless import DeviceType
 
-        try:
-            devices = self.device_server.devices()
-        except ConnectionError:
-            print('no connection to the device server', file=sys.stderr)
-            return
-        except:
-            traceback.print_exc()
-            return
-
-        real = None
-        fake = None
-
-        for dev in devices:
-            if dev.dev_type == DeviceType.rover:
-                real = dev
-            elif dev.dev_type == DeviceType.fake_rover:
-                fake = dev
-
-        if real is not None:
-            return (real.dev_type, real.req_port, real.pub_port, real.address)
-        elif fake is not None:
-            return (fake.dev_type, fake.req_port, fake.pub_port, fake.address)
-        else:
-            return None
-
-    def _reconnect(self, dev_descr):
-        from DeviceServerHeadless import DEVICE_TYPE_INFO
-
-        if self.rover is not None:
-            return
-
-        if dev_descr is None:
-            return
-
-        dev_type, req_port, pub_port, address = dev_descr
-        _, _, interface_class = DEVICE_TYPE_INFO[dev_type]
-        self.rover = interface_class(req_port=req_port, pub_port=pub_port, host=address, zmq_context=self.zmq_context)
+        with self.lock:
+            if self.rover is None:
+                rover = self.device_server.find_device([DeviceType.rover, DeviceType.fake_rover])
+                if rover is not None:
+                    self.rover = rover
 
     def _auto_step(self):
         if not self.core.is_running():
@@ -275,12 +243,9 @@ class AutonomyWorker(DeviceWorker):
             elif cmd.type == CmdType.RUN_SCRIPT:
                 name = cmd.args[0]
                 rover.run_script(rover.script_library[name])
-            self.failed_connections = max(self.failed_connections - 1, 0)
         except ConnectionError:
             print('can\'t connect to the rover', file=sys.stderr)
-            self.failed_connections += 1
-            if self.failed_connections >= MAX_FAILED_CONNNECTIONS:
-                self.failed_connections = 0
+            with self.lock:
                 self.rover.close()
                 self.rover = None
 

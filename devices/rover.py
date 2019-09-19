@@ -28,7 +28,7 @@ from devices.reach_tcp import Reach
 try:
     import can
 except Exception as e:
-    print(e)
+    pass
 
 try:
     import Adafruit_DHT

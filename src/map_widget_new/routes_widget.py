@@ -5,6 +5,8 @@ from PyQt5.QtGui import *
 from devices.autonomy import Task
 from src.common.coord import *
 
+import traceback
+
 
 class Routes(QGroupBox):
 	auto_started = pyqtSignal(list)
@@ -79,8 +81,10 @@ class Routes(QGroupBox):
 		try:
 			route = self.routes[self.selected_route]
 			self.auto_started.emit(route)
-		except Exception as e:
-			print(e)
+		except KeyError:
+			pass
+		except:
+			traceback.print_exc()
 
 	def _stop_auto(self):
 		print('[map/routes] stopping the autonomy')
@@ -199,8 +203,10 @@ class Routes(QGroupBox):
 				else:
 					print('[map/routes] invalid task type "{}"'.format(task_type))
 				self.list_nodes.addItem(text)
-		except Exception as e:
-			print(e)
+		except KeyError:
+			pass
+		except:
+			traceback.print_exc()
 
 		self._publish_route()
 
@@ -209,5 +215,7 @@ class Routes(QGroupBox):
 			route = self.routes[self.selected_route]
 			waypoints = [args for (task_type, args) in route if task_type == Task.DRIVE_TO]
 			self.route_selected.emit(waypoints)
-		except Exception as e:
-			print(e)
+		except KeyError:
+			pass
+		except:
+			traceback.print_exc()

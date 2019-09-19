@@ -2,7 +2,7 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 
-from DeviceServerHeadless import DeviceServer, DEVICE_TYPE_INFO, DeviceType, DeviceDescription
+from DeviceServerHeadless import DEVICE_TYPE_INFO, DeviceType
 
 import enum
 import queue
@@ -129,24 +129,15 @@ RequestType = enum.Enum('RequestType', [
 ])
 
 class DevicesWidget(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, device_server, parent=None):
         super().__init__(parent)
 
-        self.requests_queue = queue.SimpleQueue()
-        self.updates_queue = queue.SimpleQueue()
-
+        self.device_server = device_server
+        self.device_server_raw = device_server.get_raw_interface()
         self.known_servers = {}
+        self.requests_queue = queue.SimpleQueue()
 
-        main_layout = QHBoxLayout()
-        self.setLayout(main_layout)
-
-        self.servers_layout = QHBoxLayout()
-        main_layout.addLayout(self.servers_layout)
-
-        main_layout.addStretch()
-
-        self.device_server = DeviceServer()
-        self.device_server.create_listener_thread(self._process_server_status)
+        self._create_layout()
 
         threading.Thread(target=self._process_server_requests, daemon=True).start()
 
@@ -154,6 +145,13 @@ class DevicesWidget(QWidget):
         self.refresh_timer.setInterval(REFRESH_DELAY_MS)
         self.refresh_timer.timeout.connect(self._refresh)
         self.refresh_timer.start()
+
+    def _create_layout(self):
+        main_layout = QHBoxLayout()
+        self.setLayout(main_layout)
+        self.servers_layout = QHBoxLayout()
+        main_layout.addLayout(self.servers_layout)
+        main_layout.addStretch()
 
     @pyqtSlot(int, str)
     def _start_device(self, dev_type, hostname):
@@ -164,21 +162,12 @@ class DevicesWidget(QWidget):
         self.requests_queue.put((RequestType.stop_process, name, hostname))
 
     def _refresh(self):
-        status = None
-        while True:
-            try:
-                status = self.updates_queue.get_nowait()
-            except queue.Empty:
-                break
-
-        if status is None:
-            return
-
         try:
-            hosts = status.get('hosts')
-            devices = status.get('devices')
+            hosts = self.device_server.hosts()
+            devices = self.device_server.devices()
 
-            for hostname, host_info in hosts.items():
+            for host_info in hosts:
+                hostname = host_info.hostname
                 if hostname not in self.known_servers:
                     panel = ServerWidget(hostname)
                     panel.device_created.connect(self._start_device)
@@ -186,24 +175,17 @@ class DevicesWidget(QWidget):
                     self.servers_layout.addWidget(panel)
                     self.known_servers[hostname] = panel
 
+            connected_dict = { host_info.hostname: host_info.connected for host_info in hosts }
+
             for hostname, panel in self.known_servers.items():
-                if hostname in devices and hostname in hosts:
-                    connected = hosts.get(hostname).get('connected')
-                else:
-                    connected = False
-
-                if hostname in devices:
-                    host_devices = [DeviceDescription(hostname=hostname, **dev) for dev in devices.get(hostname)]
-                else:
-                    host_devices = []
-
+                host_devices = [dev_info for dev_info in devices if dev_info.hostname == hostname]
+                connected = connected_dict.get(hostname) or False
                 panel.update_devices(host_devices, connected)
         except:
             traceback.print_exc()
 
     def _process_server_status(self, status):
         self.setEnabled(True)
-        self.updates_queue.put(status)
 
     def _process_server_requests(self):
         while True:
@@ -213,11 +195,11 @@ class DevicesWidget(QWidget):
             try:
                 if request_type == RequestType.start_process:
                     _, dev_type, hostname = request
-                    self.device_server.start_device(dev_type, hostname)
+                    self.device_server_raw.start_device(dev_type, hostname)
 
                 elif request_type == RequestType.stop_process:
                     _, name, hostname = request
-                    self.device_server.stop_device(name, hostname)
+                    self.device_server_raw.stop_device(name, hostname)
 
             except ConnectionError:
                 self.setDisabled(True)

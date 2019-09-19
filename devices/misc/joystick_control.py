@@ -4,7 +4,7 @@
 import os
 from PyQt5 import QtCore, QtWidgets, QtGui
 import jsonpickle
-from DeviceServerHeadless import DeviceServer, DeviceType
+from DeviceServerHeadless import DeviceType
 from ..misc.xbox import XBoxPad
 import sys
 import time
@@ -98,15 +98,11 @@ class Slave():
 class JoystickControlWidget(QtWidgets.QWidget):
     """ A widget for interactive control of APT motors or attocube axes using XBoxPad """
 
-    def __init__(self, parent=None):
+    def __init__(self, device_server, parent=None):
         super().__init__(parent)
         
-        self.device_server = DeviceServer()
-        self.devices = self.device_server.devices()
-        for dev in self.devices:
-            if dev.dev_type == DeviceType.xbox_pad:
-                self.xbox = dev.interface()
-                break
+        self.device_server = device_server
+        self.xbox = self.device_server.find_device([DeviceType.xbox_pad])
 
         self.timer = QtCore.QTimer()
         self.timer.setSingleShot(5000)
@@ -167,20 +163,8 @@ class JoystickControlWidget(QtWidgets.QWidget):
         self.start(False)
         self.slaves = []
         try:
-            real_rover = None
-            fake_rover = None
-
-            for dev in self.devices:
-                if dev.dev_type == DeviceType.rover:
-                    real_rover = dev
-                elif dev.dev_type == DeviceType.fake_rover:
-                    fake_rover = dev
-
-            if real_rover is not None:
-                rover = real_rover.interface()
-            elif fake_rover is not None:
-                rover = fake_rover.interface()
-            else:
+            rover = self.device_server.find_device([DeviceType.rover, DeviceType.fake_rover])
+            if rover is None:
                 print('no rover connected', file=sys.stderr)
                 return
 

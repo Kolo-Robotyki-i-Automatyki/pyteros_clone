@@ -1,16 +1,17 @@
+from PyQt5 import QtWidgets, QtGui, QtCore, QtSvg
 
 from src.map_widget.sample_image_item import SampleImageItem
 from devices.rover import Rover,relative_position_default_origin
 from DeviceServerHeadless import DeviceServer, DeviceType
 
+from collections import OrderedDict
+import jsonpickle
+import math
+import numpy
 import os
 import scipy as sp
 from scipy import optimize
-import math
-from PyQt5 import QtWidgets, QtGui, QtCore, QtSvg
-from collections import OrderedDict
-import jsonpickle
-import numpy
+import traceback
 
 epsilon = 0.000000001
 
@@ -116,9 +117,11 @@ def _create_can_poll(can, name, axis):
 
 
 class MapWidget(QtWidgets.QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, device_server, parent=None):
         super().__init__(parent)
-        self.device_list = DeviceServer().devices()
+
+        self.device_server = device_server
+        
         self.slaves = []
         self.pools = []
         self.bg_item = None
@@ -194,12 +197,7 @@ class MapWidget(QtWidgets.QWidget):
         hlayout4.addStretch(1)
         layout.addLayout(hlayout4)
 
-        try:
-            for dev in self.device_list:
-                if dev.dev_type == DeviceType.rover:
-                    self.can = dev.interface()
-        except Exception as e:
-            print(e)
+        self.cat = self.device_server.find_device([DeviceType.rover, DeviceType.fake_rover])
 
         self.slopepoints = []
 
@@ -210,17 +208,17 @@ class MapWidget(QtWidgets.QWidget):
                 for direction in axes:
                     self.combos[direction].setCurrentText(axes[direction])
 
-        except Exception as e:
+        except:
             self.saveSettings()
-            print(e)
+            traceback.print_exc()
 
     def saveSettings(self):
         try:
             with open("config" + os.sep + "map_widget.cfg", "w") as file:
                 axes = {direction: self.combos[direction].currentText() for direction in self.combos}
                 file.write(jsonpickle.encode(axes))
-        except Exception as e:
-            print(e)
+        except:
+            traceback.print_exc()
 
     def setupScene(self):
         self.scene = QtWidgets.QGraphicsScene()
@@ -254,13 +252,12 @@ class MapWidget(QtWidgets.QWidget):
         self.slaves = []
 
         try:
-            for dev in self.device_list:
-                if dev.dev_type == DeviceType.rover:
-                    can = dev.interface()
-                    self.pools.append(_create_can_poll(can, "x", 0))
-                    self.pools.append(_create_can_poll(can, "y", 1))
-        except Exception as e:
-            print(e)
+            can = self.device_server.find_device([DeviceType.rover, DeviceType.fake_rover])
+            if can is not None:
+                self.pools.append(_create_can_poll(can, "x", 0))
+                self.pools.append(_create_can_poll(can, "y", 1))
+        except:
+            traceback.print_exc()
 
         for direction, combo in self.combos.items():
             n = combo.currentIndex()
