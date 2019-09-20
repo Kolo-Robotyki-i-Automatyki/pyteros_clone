@@ -34,7 +34,7 @@ class Settings:
 
 	def save(self):		
 		with open(self.config_user, 'w') as f:
-			json.dump(self.cache, f)
+			json.dump(self.cache, f, indent=4)
 
 	def set(self, key, val, save=True):
 		self.cache[key] = val

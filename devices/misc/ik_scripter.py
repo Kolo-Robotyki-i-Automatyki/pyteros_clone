@@ -7,7 +7,7 @@ from PyQt5 import QtCore,QtWidgets,QtGui
 import PyQt5
 import jsonpickle
 import time
-from DeviceServerHeadless import get_devices, get_proxy
+from DeviceServerHeadless import DeviceServer, DeviceType
 from ..rover import Rover
 
 dead_zone = 0.15
@@ -17,12 +17,13 @@ class IKScripterWidget(QtWidgets.QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.device_list = { dev.name: get_proxy(dev) for dev in get_devices() }
+        self.device_list = DeviceServer().devices()
         self.rover = None
         try:
-            for rovername, rover in {k: v for k, v in self.device_list.items() if isinstance(v, Rover)}.items():
-                self.rover = rover
-                break
+            for dev in self.device_list:
+                if dev.dev_type == DeviceType.rover or dev.dev_type == DeviceType.fake_rover:
+                    self.rover = dev.interface()
+                    break
         except Exception as e:
             print(e)
         #if self.rover == None:

@@ -1,3 +1,5 @@
 Rover,devices.rover.RoverWorker,devices.rover.Rover
+Fake rover,devices.fake_rover.FakeRoverWorker,devices.fake_rover.FakeRover
+Autonomy,devices.autonomy.AutonomyWorker,devices.autonomy.Autonomy
 XBox pad,devices.misc.xbox.XBoxWorker,devices.misc.xbox.XBoxPad
 Camera server,devices.cameras.CameraServerWorker,devices.cameras.CameraServer

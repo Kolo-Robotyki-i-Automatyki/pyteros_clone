@@ -1,19 +1,18 @@
 # -*- coding: utf-8 -*-
 
+import sys
 from time import sleep
 import threading
 from inputs import devices
-from ..zeromq_device import DeviceWorker, DeviceOverZeroMQ, remote, include_remote_methods
-
-default_req_port = 7004
-default_pub_port = 7005
+from ..zeromq_device import DeviceWorker, DeviceInterface, remote, include_remote_methods
 
 
 class XBoxWorker(DeviceWorker):
 
-    def __init__(self, req_port=default_req_port, pub_port=default_pub_port, id=0, reversed=False, **kwargs):
+    def __init__(self, req_port, pub_port, refresh_period=0.1, id=0, reversed=False, **kwargs):
+        super().__init__(req_port=req_port, pub_port=pub_port, refresh_period=refresh_period, **kwargs)
         self.device_number = int(id)
-        super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
+        self.refresh_period = refresh_period
         self.reversed = reversed
         self.axes = {
             'ABS_X': 'l_thumb_x',
@@ -39,6 +38,8 @@ class XBoxWorker(DeviceWorker):
         for axis in self.axes:
             self.values[axis] = 0
 
+        print('nice init')
+
     def init_device(self):
         self.gamepad = devices.gamepads[self.device_number]
         try:
@@ -48,12 +49,9 @@ class XBoxWorker(DeviceWorker):
         except Exception:
             pass
 
-
-
         print("Pad no. " + str(self.device_number + 1) + " is now connected.")
         self.state_lock = threading.Lock()
-        self.status_thread = threading.Thread(target=self._state_loop)
-        self.status_thread.start()
+        threading.Thread(target=self._state_loop, daemon=True).start()
 
     def _state_loop(self):
         while True:
@@ -75,10 +73,9 @@ class XBoxWorker(DeviceWorker):
                         with self.state_lock:
                             self.values[axis] = value
             except Exception as e:
-                for key in self.values:
-                    with self.state_lock:
-                        self.values[key] = 0
                 with self.state_lock:
+                    for key in self.values:
+                        self.values[key] = 0
                     self.values["connected"] = False
 
     def get_state(self):
@@ -115,8 +112,8 @@ class XBoxWorker(DeviceWorker):
 
 
 @include_remote_methods(XBoxWorker)
-class XBoxPad(DeviceOverZeroMQ):
-    def __init__(self, req_port=default_req_port, pub_port=default_pub_port, **kwargs):
+class XBoxPad(DeviceInterface):
+    def __init__(self, req_port, pub_port, **kwargs):
         super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
 
     def createDock(self, parentWidget, menu=None):
@@ -146,4 +143,4 @@ class XBoxPad(DeviceOverZeroMQ):
                 self.checkbox.setCheckState(v)
             # self.textedit.setText(str(status))
 
-        self.createListenerThread(updateSlot)
+        self.create_listener_thread(updateSlot)

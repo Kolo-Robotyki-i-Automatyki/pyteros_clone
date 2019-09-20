@@ -1,458 +1,291 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Sat May 26 09:54:02 2018
-
-This code was originally written by Tomasz Kazimierczuk for LUMS - Laboratory
-of Ultrafast MagnetoSpectroscopy at Faculty of Physics, University of Warsaw
-
-"""
-
-from PyQt5 import Qt, QtCore
-import zmq
-
-from devices.zeromq_device import *
-
-from collections import namedtuple
-import csv
-import importlib
+import collections
+import enum
+import json
+import multiprocessing
 import random
-import re
+import select
 import socket
-import sys
+import threading
 import time
 import traceback
+import zmq
+
+from devices.autonomy import AutonomyWorker, Autonomy
+from devices.cameras import CameraServerWorker, CameraServer
+from devices.fake_rover import FakeRoverWorker, FakeRover
+from devices.misc.xbox import XBoxWorker, XBoxPad
+from devices.rover import RoverWorker, Rover
+from devices.zeromq_device import remote, include_remote_methods
+from devices.zeromq_device import DeviceWorker, DeviceInterface, PublisherTopic
+from devices.zeromq_device import CONTEXT as ZMQ_CONTEXT
+from src.common.misc import NumpyArrayEncoder, NumpyArrayDecoder
 
 
-DEVICE_TYPES_FILE = 'devices.csv'
-LOCAL_DEVICES_FILE = 'local_devices.txt'
+SERVER_DISCOVERY_PORT = 50001
+SERVER_DISCOVERY_PERIOD_S = 0.2
+SERVER_TIMEOUT_S = 2.0
 
-FETCH_PROCESS_OUTPUT_DELAY_S = 0.1
+SERVER_REQ_PORT = 50002
+SERVER_PUB_PORT = 50003
+DEVICE_PORT_RANGE = (51000, 52000)
 
-PROCESS_AUTOSTART_DELAY_MS = 200
-
-PORT_RANGE = (30000, 40000)
-DEVICE_SERVER_PUB_PORT = 23412
-DEVICE_SERVER_REQ_PORT = 23413
-HEARTBEAT_SEND_PORT = 14452
-HEARTBEAT_RECV_PORT = 14453
-HEARTBEAT_DELAY_S = 1.0
-FETCH_PROCESSES_LIST_DELAY_S = 0.1
+SERVER_REFRESH_PERIOD_S = 0.5
 
 
-class ZMQ_Listener(QtCore.QObject):
-    """ A class to implement a thread listening for stdout/stderr 
-    from other thread via a ZeroMQ PUB/SUB socket pair """
-    msg_info = QtCore.pyqtSignal(str)
-    msg_err = QtCore.pyqtSignal(str)
+DeviceType = enum.IntEnum('DeviceType', [
+    'rover',
+    'fake_rover',
+    'autonomy',
+    'xbox_pad',
+    'camera_server',
+])
 
-    def __init__(self, socket):
-        QtCore.QObject.__init__(self)
-        self.socket = socket
-        self.continue_running = True
-         
-    def loop(self):
-        while self.continue_running:
-            try:
-                [address, contents] = self.socket.recv_multipart(flags=zmq.NOBLOCK)
-            except zmq.error.Again:
-                time.sleep(FETCH_PROCESS_OUTPUT_DELAY_S)
-                continue
+DEVICE_TYPE_INFO = {
+    DeviceType.rover: ('Rover', RoverWorker, Rover),    
+    DeviceType.fake_rover: ('Fake rover', FakeRoverWorker, FakeRover),
+    DeviceType.autonomy: ('Autonomy', AutonomyWorker, Autonomy),
+    DeviceType.xbox_pad: ('XBox pad', XBoxWorker, XBoxPad),
+    DeviceType.camera_server: ('Camera server', CameraServerWorker, CameraServer),
+}
 
-            if address == b'stderr':
-                self.msg_err.emit(contents.decode('ascii'))
-            else:
-                self.msg_info.emit(contents.decode('ascii'))
+class HostStruct:
+    __slots__ = [
+        'address',
+        'last_seen',
+        'interface',
+    ]
 
+    def __init__(self, zmq_context, address, last_seen):
+        self.address = address
+        self.last_seen = time.time()
+        self.interface = DeviceServer(zmq_context=zmq_context, address=address)
 
-class Process(QtCore.QObject):
-    def __init__(self, req_port: int = 0, pub_port: int = 0, process_class = None, create_daemonic: bool = True, **kwargs):
-        super().__init__()
+class DeviceStruct:
+    __slots__ = [
+        'dev_type',
+        'req_port',
+        'pub_port',
+        'process',
+        'interface',
+    ]
 
-        self.lock = threading.Lock()
-
+    def __init__(self, dev_type, req_port, pub_port, process):
+        self.dev_type = dev_type
         self.req_port = req_port
         self.pub_port = pub_port
-        self.process_class = process_class
-        self.create_daemonic = create_daemonic
+        self.process = process
+        _, _, interface_class = DEVICE_TYPE_INFO[dev_type]
+        self.interface = interface_class(req_port=req_port, pub_port=pub_port, host='localhost')
+
+
+class DeviceWorkerProcess(multiprocessing.Process):
+    """Process that runs a DevieWorker"""
+    def __init__(self, dev_type, args, kwargs):
+        super().__init__()
+
+        self.dev_type = dev_type
+        self.args = args
         self.kwargs = kwargs
-        
-        zmq_context = zmq.Context()
-        self.sub_socket = zmq_context.socket(zmq.SUB)
-        self.sub_socket.connect("tcp://localhost:%s" % str(pub_port))
-        self.sub_socket.setsockopt(zmq.SUBSCRIBE, b'std')
-        
-        self.process = None
-        
-        def appendErr(text):
-            print(text)
-        
-        def appendInfo(text):
-            print(text)
 
-        self.listener_thread = QtCore.QThread(self)
-        self.listener = ZMQ_Listener(self.sub_socket)
-        self.listener.moveToThread(self.listener_thread)
-        self.listener_thread.started.connect(self.listener.loop)
-        self.listener.msg_info.connect(appendInfo)
-        self.listener.msg_err.connect(appendErr)
-        self.listener_thread.start()
-
-        self.monitor_process_timer = QtCore.QTimer(self)
-        self.monitor_process_timer.timeout.connect(self._check_on_process)
-
-        self.start_process()
-
-    def __del__(self):
-        self.listener.continue_running = False
-        self.listener_thread.quit()
-        self.listener_thread.wait()
-        self.stop_process()
-
-    def start_process(self):
-        with self.lock:
-            self._start_process()
-
-    def _start_process(self):
+    def run(self):
         try:
-            self.process = self.process_class(req_port=self.req_port, pub_port=self.pub_port, **self.kwargs)
-            self.process.daemon = self.create_daemonic
-            self.process.start()
-            self.monitor_process_timer.start(PROCESS_AUTOSTART_DELAY_MS)
-        except Exception as e:
-            print('Process._start_process(): {}'.format(e))
+            _, worker_class, _ = DEVICE_TYPE_INFO[self.dev_type]
+            device = worker_class(*self.args, **self.kwargs)
+            device.run()
+        except:
+            traceback.print_exc()
 
-    def stop_process(self):
-        with self.lock:
-            self._stop_process()
 
-    def _stop_process(self):
-        try:       
-            self.monitor_process_timer.stop()
-
-            if self.process is not None:
-                self.process.terminate()
-                self.process.join()
-                self.process = None
-        except Exception as e:
-            print('Process._stop_process(): {}'.format(e))
-
-    def _check_on_process(self):
-        with self.lock:
-            if self.process is not None:
-                if not self.process.is_alive():
-                    print('Process._check_on_process(): restarting {}'.format(self.process_class))
-                    self._stop_process()
-                    self._start_process()
-
-class _DeviceServerWorker(DeviceWorker):
-    def __init__(self, req_port, pub_port):
-        super().__init__(req_port=req_port, pub_port=pub_port)
-        load_device_types()
-
-    def init_device(self):
-        super().init_device()
-
-        self.qt_app = QtCore.QCoreApplication(sys.argv)
-
-        self.local_processes_lock = threading.Lock()
-        self.hosts_lock = threading.Lock()
-
-        self.device_types = get_device_types()
+class DeviceServerWorker(DeviceWorker):
+    """Server that runs other DeviceWorkers in separate processes"""
+    def __init__(self):
+        super().__init__(req_port=SERVER_REQ_PORT, pub_port=SERVER_PUB_PORT, refresh_period=SERVER_REFRESH_PERIOD_S)
 
         self.hostname = socket.gethostname()
-        self.local_processes = {}
+        self.hosts = {}
+        self.local_devices = {}
+        self.external_devices = {}
+        self.used_ports = set()
 
-        self.remote_hosts = {}
-        self.remote_processes = {}
+    def init_device(self):
+        self.discovery_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        self.discovery_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        self.discovery_socket.bind(('', SERVER_DISCOVERY_PORT))
 
-        with open(LOCAL_DEVICES_FILE) as f:
-            for dev_type in f:
-                dev_type = dev_type.strip()
-                if len(dev_type) > 0:
-                    self._start_local_process(dev_type.replace(' ', '_'), dev_type)
+        self.start_periodic_task(self._discover_hosts, self._update_hosts, SERVER_DISCOVERY_PERIOD_S)
+ 
+    def destroy_device(self):
+        for name, dev_info in self.local_devices.items():
+            dev_info.interface.stop()
+            dev_info.interface.close()
+        for name, host_info in self.hosts.items():
+            host_info.interface.close()
 
-        threading.Thread(target=self._send_heartbeat, daemon=True).start()        
-        threading.Thread(target=self._recv_heartbeat, daemon=True).start()
-
-    def log(self, msg: str):
-        print('[_DeviceServer] {}'.format(msg))
+    def status(self):
+        status = {
+            'name': self.hostname,
+            'hosts': self.get_hosts(),
+            'devices': self.get_devices(),
+        }
+        return status
 
     @remote
-    def get_all_hosts(self):
-        hosts = { self.hostname: 'localhost' }
-        with self.hosts_lock:
-            for hostname, (addr, _) in self.remote_hosts.items():
-                hosts[hostname] = addr
-        return hosts
+    def get_hosts(self):
+        result = {}
+        time_now = time.time()
+        for hostname, descr in self.hosts.items():
+            result[hostname] = {
+                'address': descr.address,
+                'connected': (descr.last_seen + SERVER_TIMEOUT_S > time_now),
+            }
+        return result
 
     @remote
-    def get_local_processes(self):
+    def get_local_devices(self):
         result = []
-        with self.local_processes_lock:
-            for name, (_, dev_type, pub, req) in self.local_processes.items():
-                result.append((name, dev_type, self.hostname, pub, req))
+        for name, data in self.local_devices.items():
+            dev_descr = {
+                'name': name,
+                'dev_type': data.dev_type,
+                'req_port': data.req_port,
+                'pub_port': data.pub_port,
+                'address': self.hosts.get(self.hostname).address,
+            }
+            result.append(dev_descr)
         return result
 
     @remote
-    def get_all_processes(self):
-        result = self.get_local_processes()
-        with self.hosts_lock:
-            for host, process_list in self.remote_processes.items():
-                for name, dev_type, _, pub, req in process_list:
-                    result.append((name, dev_type, host, pub, req))
-        return result
-
-    def _get_unique_name(self, name: str):
-        with self.local_processes_lock:
-            if name not in self.local_processes:
-                return name
-
-            if len(name) == 0:
-                base, number = 'dev', 1
-            elif re.match(r'^\d+$', name) is not None:
-                base, number = 'dev', int(name)
-            elif re.match(r'^\D+$', name) is not None:
-                base, number = name, 1
-            else:
-                match = re.match(r'(^.*\D)(\d+$)', name)
-                base, number = match[1], int(match[2])
-
-            while (name + str(number)) in self.local_processes:
-                number += 1
-
-            return name + str(number)
+    def get_devices(self):
+        all_devices = self.external_devices
+        all_devices.update({ self.hostname: self.get_local_devices() })
+        return all_devices
 
     @remote
-    def start_process(self, name: str, dev_type: str, host: str = None, **kwargs):
+    def start_device(self, dev_type, host = None, args = (), kwargs = {}):
+        if host not in [None, 'localhost', self.hostname]:
+            interface = self.hosts[host].interface
+            interface.start_device(dev_type, host, args, kwargs)
+        else:
+            self._start_local_device(DeviceType(dev_type), args, kwargs)
+
+    @remote
+    def stop_device(self, name, host = None):
+        if host not in [None, 'localhost', self.hostname]:
+            interface = self.hosts[host].interface
+            interface.stop_device(name, host)
+        else:
+            self._stop_local_device(name)
+
+    def _start_local_device(self, dev_type, args, kwargs):
+        print('starting device of type "{}"'.format(dev_type.name))
+
+        pub_port = self._get_random_port()
+        req_port = self._get_random_port()
+        name = dev_type.name + str(req_port)
+        kwargs.update(dict(req_port=req_port, pub_port=pub_port))
+        process = DeviceWorkerProcess(dev_type, args, kwargs)
+        process.start()
+
+        dev_data = DeviceStruct(dev_type, req_port, pub_port, process)
+        self.local_devices[name] = dev_data
+
+    def _stop_local_device(self, name):
+        print('stopping device "{}"'.format(name))
+
         try:
-            if host is None or host == self.hostname:                
-                self._start_local_process(name, dev_type, **kwargs)
-            else:
-                self._start_remote_process(name, dev_type, host, **kwargs)
-        except Exception as e:
-            self.log('start_process(): {}'.format(e))
-
-    def _start_local_process(self, name: str, dev_type: str, **kwargs):
-        if dev_type not in self.device_types:
-            self.log('unrecognized device type "{}"'.format(dev_type))
+            dev_data = self.local_devices.pop(name)
+        except KeyError:
+            print('device {} is not running'.format(name))
             return
 
-        if 'pub_port' not in kwargs or 'req_port' not in kwargs:
-            used_ports = set()
-            with self.local_processes_lock:
-                for _, (_, _, pub, req) in self.local_processes.items():
-                    used_ports.add(pub)
-                    used_ports.add(req)
+        dev_data.interface.stop()
+        dev_data.interface.close()
 
-                for param in ['pub_port', 'req_port']:
-                    while True:
-                        port = random.randrange(*PORT_RANGE)
-                        if port not in used_ports:
-                            used_ports.add(port)
-                            kwargs[param] = port
-                            break
+        self.used_ports.remove(dev_data.req_port)
+        self.used_ports.remove(dev_data.pub_port)
 
-        pub_port = kwargs['pub_port']
-        req_port = kwargs['req_port']
+    def _get_random_port(self):
+        while True:
+            port = random.randrange(*DEVICE_PORT_RANGE)
+            if port not in self.used_ports:
+                self.used_ports.add(port)
+                return port
 
-        worker_path, _ = self.device_types[dev_type]
-        worker_module, worker_name = worker_path.rsplit('.', 1)
-        worker_class = getattr(importlib.import_module(worker_module), worker_name)
+    def _discover_hosts(self):
+        socket = self.discovery_socket
 
-        name = self._get_unique_name(name)
+        msg = self.hostname.encode('utf-8')
+        socket.sendto(msg, ('<broadcast>', SERVER_DISCOVERY_PORT))
 
-        with self.local_processes_lock:
-            self.log('creating process "{}": {}'.format(name, dev_type))
+        detected_hosts = {}
+        while True:
+            ready, _, _ = select.select([socket], [], [], 0.0)
+            if len(ready) == 0:
+                break
 
-            process = Process(process_class=worker_class, **kwargs)
-            self.local_processes[name] = (process, dev_type, pub_port, req_port)
+            msg, (address, port) = socket.recvfrom(1024)
+            hostname = msg.decode('utf-8')
+            detected_hosts[hostname] = address
 
-    def _start_remote_process(self, name: str, dev_type: str, host: str, **kwargs):
-        def worker(address, name, dev_type, host, kwargs):
-            interface = _DeviceServer(host=address)
-            interface.start_process(name, dev_type, host, **kwargs)
+        return detected_hosts
 
-        with self.hosts_lock:
-            if host not in self.remote_hosts:
-                return
-            address, _ = self.remote_hosts[host]
-
-        threading.Thread(target=worker, args=(address, name, dev_type, host, kwargs)).start()
-
-    @remote
-    def stop_process(self, name: str, host: str = None):
-        try:
-            if host is None or host == self.hostname:
-                self._stop_local_process(name)
+    def _update_hosts(self, new_hosts):
+        time_now = time.time()
+        for hostname, address in new_hosts.items():
+            if hostname not in self.hosts:
+                host_data = HostStruct(self.zmq_context, address, time_now)
+                self.hosts[hostname] = host_data
+                if hostname != self.hostname:
+                    endpoint = 'tcp://{}:{}'.format(address, SERVER_PUB_PORT)
+                    self.connect_to_endpoint(endpoint, zmq.SUB, self._update_external_devices)
             else:
-                self._stop_remote_process(name, host)
-        except Exception as e:
-            self.log('stop_process(): {}'.format(e))
+                self.hosts[hostname].last_seen = time_now
 
-    def _stop_local_process(self, name: str):
-        with self.local_processes_lock:
-            if name not in self.local_processes:
-                self.log('"{}" is not currently running'.format(name))
-                return
-
-            self.log('stopping process "{}"'.format(name))
-
-            process, _, _, _ = self.local_processes[name]
-            process.stop_process()
-            del self.local_processes[name]
-
-    def _stop_remote_process(self, name: str, host: str):
-        def worker(address, name, host):
-            interface = _DeviceServer(host=address)
-            interface.stop_process(name, host)
-
-        with self.hosts_lock:
-            if host not in self.remote_hosts:
-                return
-            address, _ = self.remote_hosts[host]
-
-        threading.Thread(target=worker, args=(address, name, host)).start()
-
-    def _send_heartbeat(self):       
-        send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-        send_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        send_sock.bind(('', HEARTBEAT_SEND_PORT))
-
-        while True:
-            try:
-                msg = self.hostname.encode('ascii')
-                send_sock.sendto(msg, ('<broadcast>', HEARTBEAT_RECV_PORT))
-                time.sleep(HEARTBEAT_DELAY_S)
-            except Exception as e:
-                self.log('_send_heartbeat(): {}'.format(e))
-
-    def _recv_heartbeat(self):
-        recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        recv_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        recv_sock.bind(('', HEARTBEAT_RECV_PORT))
-
-        while True:
-            try:
-                msg, (addr, port) = recv_sock.recvfrom(1024)
-                hostname = msg.decode('ascii')
-                if hostname == self.hostname:
-                    continue
-
-                check_host_thread = None
-                with self.hosts_lock:
-                    if hostname not in self.remote_hosts:
-                        interface = _DeviceServer(host=addr)
-                        self.remote_hosts[hostname] = (addr, interface)
-                        self.remote_processes[hostname] = []
-                        check_host_thread = threading.Thread(target=self._check_remote_host, args=(hostname,), daemon=True)
-                if check_host_thread is not None:
-                    check_host_thread.start()
-            
-            except Exception as e:
-                self.log('_recv_heartbeat(): {}'.format(e))
-
-    def _check_remote_host(self, host: str):
-        while True:
-            try:
-                with self.hosts_lock:
-                    if host not in self.remote_hosts:
-                        return
-                    _, interface = self.remote_hosts[host]
-                processes = interface.get_local_processes()
-                with self.hosts_lock:
-                    self.remote_processes[host] = processes
-
-                time.sleep(FETCH_PROCESSES_LIST_DELAY_S)
-            except ConnectionError:
-                self.log('_check_remote_host(): {} is not responding'.format(host))
-            except Exception as e:
-                self.log('_check_remote_host(): {}: {}'.format(type(e), e))
-
-@include_remote_methods(_DeviceServerWorker)
-class _DeviceServer(DeviceOverZeroMQ):
-    def __init__(self, host):
-        super().__init__(req_port=DEVICE_SERVER_REQ_PORT, pub_port=DEVICE_SERVER_PUB_PORT, host=host)
- 
-################################################################################
-
-_known_device_types = None
-
-def load_device_types():
-    global _known_device_types
-
-    with open(DEVICE_TYPES_FILE) as device_types_file:
-        device_types = {}
-        for row in csv.reader(device_types_file):
-            if len(row) != 3:
-                continue
-            name, worker_path, interface_path = row
-            device_types[name] = (worker_path, interface_path)
-        _known_device_types = device_types
-
-def get_device_types():
-    global _known_device_types
-
-    if _known_device_types is None:
-        load_device_types()
-    return _known_device_types
+    def _update_external_devices(self, host_msg):
+        topic = host_msg.get('topic')
+        if topic != PublisherTopic.status:
+            return
+        status = host_msg.get('contents')
+        hostname = status.get('name')
+        devices = status.get('devices').get(hostname)
+        self.external_devices[hostname] = devices
 
 
-_local_dev_server = None
-_local_server_lock = None
+class DeviceDescription:
+    def __init__(self, name, dev_type, req_port, pub_port, address, hostname):
+        self.name = name
+        self.dev_type = DeviceType(dev_type)
+        _, _, self.interface_class = DEVICE_TYPE_INFO.get(self.dev_type)
+        self.req_port = req_port
+        self.pub_port = pub_port
+        self.address = address
+        self.hostname = hostname
 
-Device = namedtuple('Device', ['name', 'type', 'host', 'req_port', 'pub_port'])
+    def interface(self):
+        return self.interface_class(req_port=self.req_port, pub_port=self.pub_port, host=self.address)
 
-def _safe_call(default):
-    def decorator(function):
-        def wrapper(*args, **kwargs):
-            try:
-                with _local_server_lock:
-                    return function(*args, **kwargs)
-            except Exception as e:
-                print('{}(): {} {}'.format(function.__name__, type(e), e))
-                return default
-        return wrapper
-    return decorator
 
-@_safe_call({})
-def get_hosts():
-    return _local_dev_server.get_all_hosts()
+@include_remote_methods(DeviceServerWorker)
+class DeviceServer(DeviceInterface):
+    def __init__(self, zmq_context = None, address = 'localhost'):
+        super().__init__(req_port=SERVER_REQ_PORT, pub_port=SERVER_PUB_PORT, host=address, zmq_context=zmq_context)
 
-@_safe_call([])
-def get_devices():
-    devices_raw = _local_dev_server.get_all_processes()
-    devices = []
-    for name, dev_type, hostname, pub_port, req_port in devices_raw:
-        devices.append(Device(name=name, type=dev_type, host=hostname, req_port=req_port, pub_port=pub_port))
-    return devices
+    def stop(self):
+        raise Exception('DeviceServer should never be stopped')
 
-@_safe_call(None)
-def get_proxy(device: Device):
-    address = _local_dev_server.get_all_hosts()[device.host]
-    _, class_path = get_device_types()[device.type]
-    return create_obj_from_path(class_path, host=address, req_port=device.req_port, pub_port=device.pub_port)
-
-@_safe_call(None)
-def start_device(name: str, dev_type: str, host: str = None, **kwargs):
-    _local_dev_server.start_process(name, dev_type, host, **kwargs)
-
-@_safe_call(None)
-def stop_device(name: str, host: str = None):
-    _local_dev_server.stop_process(name, host)
+    def devices(self):
+        result = []
+        devices_raw = self.get_devices()
+        for hostname, devices in devices_raw.items():
+            for dev in devices:
+                result.append(DeviceDescription(hostname=hostname, **dev))
+        return result
 
 
 if __name__ == '__main__':
-    app = QtCore.QCoreApplication(sys.argv)
-
-    dev_server_process = Process(
-        process_class=_DeviceServerWorker,
-        pub_port=DEVICE_SERVER_PUB_PORT,
-        req_port=DEVICE_SERVER_REQ_PORT,
-        create_daemonic=False
-    )
-    
-    app.exec_()
-else:
-    _local_dev_server = _DeviceServer(host='localhost')
-    _local_server_lock = threading.Lock()
+    try:
+        server = DeviceServerWorker()
+        print('Press Ctrl+C to exit')
+        server.run()
+    except:
+        traceback.print_exc()

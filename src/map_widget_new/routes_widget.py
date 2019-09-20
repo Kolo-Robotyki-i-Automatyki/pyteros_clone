@@ -192,7 +192,7 @@ class Routes(QGroupBox):
 			for task_type, args in route:
 				if task_type == Task.DRIVE_TO:
 					lat, lon = args
-					text = 'DROVE TO ({:2.8f}°, {:2.8f}°)'.format(lat, lon)
+					text = 'DRIVE TO ({:2.8f}°, {:2.8f}°)'.format(lat, lon)
 				elif task_type == Task.RUN_SCRIPT:
 					script_name, = args
 					text = 'RUN "{}"'.format(script_name)

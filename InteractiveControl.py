@@ -10,7 +10,7 @@ of Ultrafast MagnetoSpectroscopy at Faculty of Physics, University of Warsaw
 
 from PyQt5 import Qt,QtCore,QtGui,QtWidgets
 
-from DeviceServerHeadless import *
+from DeviceServerHeadless import DeviceServer
 from src.common.misc import create_obj_from_path
 
 import devices
@@ -25,13 +25,12 @@ class NoRequiredDevicesError(Exception):
 PAGES = {
     'Devices': 'src.devices_widget.devices_widget.DevicesWidget',
     'Pad control': 'devices.misc.joystick_control.JoystickControlWidget',
-    'Pad control [UDP]': 'src.control_widget.control_widget.JoystickControlWidget',
+    # 'Pad control [UDP]': 'src.control_widget.control_widget.JoystickControlWidget',
     # 'Pad 2 control': 'devices.misc.joystic_control2.JoystickControlWidget',
     'Map': 'src.map_widget.map_widget.MapWidget',
     'Map [new]': 'src.map_widget_new.map_widget.MapWidget',
     'IK Scripter': 'devices.misc.ik_scripter.IKScripterWidget',
     'Cameras': 'src.streaming_widget.streaming_widget.StreamingWidget',
-    'Autonomy': 'src.path_widget.path_widget.PathCreator',
 }
 
 
@@ -139,20 +138,30 @@ if __name__ == '__main__':
         window.show()
         
         window.kernel_client.execute('from DeviceServerHeadless import *')
-        window.kernel_client.execute('globals().update({dev.name: get_proxy(dev) for dev in get_devices()})')
-        window.kernel_client.execute('print([dev.name for dev in get_devices()])')
+        # window.kernel_client.execute('device_server = DeviceServer()')
+        # window.kernel_client.execute('interfaces = {dev.name: dev.interface() for dev in device_server.devices()}')
+        # window.kernel_client.execute('globals().update(interfaces)')
+        # window.kernel_client.execute('print([name for name, _ in interfaces.items()])')
         window.kernel_client.execute('import time')
         window.kernel_client.execute('import numpy as np')
         
-        for dev in get_devices():
-            try:
-                interface = get_proxy(dev)
-                interface.createDock(window, window.controlMenu)
-            except Exception as e:
-                traceback.print_exc(file=sys.stdout)
+        # device_server = DeviceServer()
+        # try:
+        #     for dev in device_server.devices():
+        #         try:
+        #             interface = dev.interface()
+        #             interface.createDock(window, window.controlMenu)
+        #         except Exception as e:
+        #             traceback.print_exc(file=sys.stdout)
+        # except:
+        #     traceback.print_exc()
 
         for page_name in PAGES:
-            window.restart_page(page_name)
+            try:
+                window.restart_page(page_name)
+            except:
+                print('[InteractiveControl] when restarting {}'.format(page_name))
+                traceback.print_exc()
 
         window.show()
         app.exec_()

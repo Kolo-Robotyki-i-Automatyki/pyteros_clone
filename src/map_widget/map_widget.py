@@ -1,7 +1,7 @@
 
 from src.map_widget.sample_image_item import SampleImageItem
 from devices.rover import Rover,relative_position_default_origin
-from DeviceServerHeadless import get_devices, get_proxy
+from DeviceServerHeadless import DeviceServer, DeviceType
 
 import os
 import scipy as sp
@@ -118,7 +118,7 @@ def _create_can_poll(can, name, axis):
 class MapWidget(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.device_list = { dev.name: get_proxy(dev) for dev in get_devices() }
+        self.device_list = DeviceServer().devices()
         self.slaves = []
         self.pools = []
         self.bg_item = None
@@ -195,9 +195,9 @@ class MapWidget(QtWidgets.QWidget):
         layout.addLayout(hlayout4)
 
         try:
-            from devices.rover import Rover
-            for name, can in {k: v for k, v in self.device_list.items() if isinstance(v, Rover)}.items():
-                self.can = can
+            for dev in self.device_list:
+                if dev.dev_type == DeviceType.rover:
+                    self.can = dev.interface()
         except Exception as e:
             print(e)
 
@@ -254,10 +254,11 @@ class MapWidget(QtWidgets.QWidget):
         self.slaves = []
 
         try:
-            from devices.rover import Rover
-            for name, can in {k: v for k, v in self.device_list.items() if isinstance(v, Rover)}.items():
-                self.pools.append(_create_can_poll(can, "x", 0))
-                self.pools.append(_create_can_poll(can, "y", 1))
+            for dev in self.device_list:
+                if dev.dev_type == DeviceType.rover:
+                    can = dev.interface()
+                    self.pools.append(_create_can_poll(can, "x", 0))
+                    self.pools.append(_create_can_poll(can, "y", 1))
         except Exception as e:
             print(e)
 

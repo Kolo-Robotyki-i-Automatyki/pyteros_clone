@@ -8,7 +8,7 @@ from typing import List
 import subprocess
 
 from devices.cameras import CameraServer
-from DeviceServerHeadless import get_devices, get_proxy
+from DeviceServerHeadless import DeviceServer, DeviceType
 from src.common.settings import Settings
 import time
 
@@ -382,9 +382,11 @@ class StreamingWidget(QWidget):
 
         self.camera_servers = []
         try:
-            for name, dev in {k: v for k, v in { dev.name: get_proxy(dev) for dev in get_devices() }.items() if isinstance(v, CameraServer)}.items():
-                self.camera_servers.append(dev)
-                print('[streaming] detected camera server "{}"'.format(name))
+            devices = DeviceServer().devices()
+            for dev in devices:
+                if dev.dev_type == DeviceType.camera_server:
+                    self.camera_servers.append(dev.interface())
+                    print('[streaming] detected camera server "{}"'.format(dev.name))
         except Exception as e:
             print(e)
 

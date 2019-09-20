@@ -39,6 +39,7 @@ class Canvas(QWidget):
 		self.rover_pos = None
 		self.rover_heading = 0
 		self.rover_trace = []
+		self.auto_status = {}
 
 		self.lineedit_latitude = QLineEdit()
 		self.lineedit_longitude = QLineEdit()
@@ -66,9 +67,6 @@ class Canvas(QWidget):
 
 	@pyqtSlot(object, float)
 	def set_rover_coord(self, pos, heading):
-		if pos == (0.0, 0.0):
-			return
-
 		self.rover_pos = pos
 		self.rover_heading = heading
 
@@ -203,7 +201,7 @@ class Canvas(QWidget):
 				painter.drawText(QPointF(5, next_row_pos), row)
 				next_row_pos += 15
 		except Exception as e:
-			print('[map] drawing autonomy status: {}'.format(e))
+			print('[map/canvas] drawing autonomy status: {}'.format(e))
 
 		# rover
 		if self.rover_pos is not None:

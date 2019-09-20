@@ -4,8 +4,9 @@
 import os
 from PyQt5 import QtCore, QtWidgets, QtGui
 import jsonpickle
-from DeviceServerHeadless import get_devices, get_proxy
+from DeviceServerHeadless import DeviceServer, DeviceType
 from ..misc.xbox import XBoxPad
+import sys
 import time
 from collections import deque
 import itertools
@@ -99,14 +100,13 @@ class JoystickControlWidget(QtWidgets.QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.device_list = { dev.name: get_proxy(dev) for dev in get_devices() }
-        self.xbox = None
-        try:
-            for xboxname, xbox in {k: v for k, v in self.device_list.items() if isinstance(v, XBoxPad)}.items():
-                self.xbox = xbox
+        
+        self.device_server = DeviceServer()
+        self.devices = self.device_server.devices()
+        for dev in self.devices:
+            if dev.dev_type == DeviceType.xbox_pad:
+                self.xbox = dev.interface()
                 break
-        except Exception as e:
-            print(e)
 
         self.timer = QtCore.QTimer()
         self.timer.setSingleShot(5000)
@@ -167,16 +167,32 @@ class JoystickControlWidget(QtWidgets.QWidget):
         self.start(False)
         self.slaves = []
         try:
-            from ..rover import Rover
-            for devname, can in {k: v for k, v in self.device_list.items() if isinstance(v, Rover)}.items():
-                for name, id in can.axes():
-                    description = name + "(" + str(id) + ")"
-                    self.slaves.append(Slave(can, description, id, step=False, method="power"))
-                for name, id in can.servos():
-                    description = name + "(" + str(id) + ")"
-                    self.slaves.append(Slave(can, description, id, step=False, method="servo"))
-                self.slaves.append(Slave(can, "throttle", 0, step=False, method="drive"))
-                self.slaves.append(Slave(can, "turning right", 1, step=False, method="drive"))
+            real_rover = None
+            fake_rover = None
+
+            for dev in self.devices:
+                if dev.dev_type == DeviceType.rover:
+                    real_rover = dev
+                elif dev.dev_type == DeviceType.fake_rover:
+                    fake_rover = dev
+
+            if real_rover is not None:
+                rover = real_rover.interface()
+            elif fake_rover is not None:
+                rover = fake_rover.interface()
+            else:
+                print('no rover connected', file=sys.stderr)
+                return
+
+            for name, id in rover.axes():
+                description = name + "(" + str(id) + ")"
+                self.slaves.append(Slave(rover, description, id, step=False, method="power"))
+            for name, id in rover.servos():
+                description = name + "(" + str(id) + ")"
+                self.slaves.append(Slave(rover, description, id, step=False, method="servo"))
+            self.slaves.append(Slave(rover, "throttle", 0, step=False, method="drive"))
+            self.slaves.append(Slave(rover, "turning right", 1, step=False, method="drive"))
+
         except Exception as e:
             print(e)
 

@@ -8,7 +8,7 @@ Communication between both parts is done by means of ZeroMQ protocol, which
 means that both parts can potentially work on different hosts.
 """
 
-from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,remote,include_remote_methods
+from devices.zeromq_device import DeviceWorker,DeviceInterface,remote,include_remote_methods
 from PyQt5 import QtWidgets,QtCore
 
 class WorkerForDummyDevice(DeviceWorker):
@@ -54,7 +54,7 @@ class WorkerForDummyDevice(DeviceWorker):
     
     
 @include_remote_methods(WorkerForDummyDevice)
-class FrontEndForDummyDevice(DeviceOverZeroMQ):
+class FrontEndForDummyDevice(DeviceInterface):
     """ Simple stub for the class to be accessed by the user """
     
     def __init__(self, *args, **kwargs):

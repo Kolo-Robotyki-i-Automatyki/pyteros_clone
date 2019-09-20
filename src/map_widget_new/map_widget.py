@@ -7,11 +7,15 @@ from src.map_widget_new.routes_widget import Routes
 from src.map_widget_new.photo_loader_widget import PhotoLoader
 from src.map_widget_new.pins_widget import Pins
 
-from DeviceServerHeadless import get_devices, get_proxy
+from DeviceServerHeadless import DeviceServer, DeviceType
 from devices.rover import Rover
+from src.common.misc import *
 from src.common.settings import Settings
 
 import math
+import threading
+import time
+import traceback
 
 
 class MapWidget(QWidget):
@@ -21,13 +25,26 @@ class MapWidget(QWidget):
 	def __init__(self, parent=None):
 		super().__init__(parent)
 
+		self.lock = threading.Lock()
+
+		self.device_server = DeviceServer()
+		devices_list = self.device_server.devices()
+
 		self.rover = None
-		for name, dev in { dev.name: get_proxy(dev) for dev in get_devices() }.items():
-			if isinstance(dev, Rover):
-				self.rover = dev
+		for dev in devices_list:
+			if dev.dev_type == DeviceType.rover or dev.dev_type == DeviceType.fake_rover:
+				self.rover = dev.interface()
 				break
 		else:
 			print('[map] rover not connected')
+
+		self.autonomy = None
+		for dev in devices_list:
+			if dev.dev_type == DeviceType.autonomy:
+				self.autonomy = dev.interface()
+				break
+		else:
+			print('[map] autonomy not connected')
 
 		self.config = Settings('map_widget')
 
@@ -71,6 +88,10 @@ class MapWidget(QWidget):
 		self.save_timer.timeout.connect(self._save_config)
 		self.save_timer.start()
 
+		self.new_rover_status = None
+		self.new_autonomy_status = None
+
+		run_daemon_in_loop(self._fetch_status, delay=0.1)
 		self.update_timer = QTimer()
 		self.update_timer.setSingleShot(False)
 		self.update_timer.setInterval(100)
@@ -83,23 +104,58 @@ class MapWidget(QWidget):
 		self.config.set('photos', self.photo_loader.get_data(), save=False)
 		self.config.save()
 
+	def _fetch_status(self):
+		rover_status = None
+		auto_status = None
+
+		try:
+			rover_status = self.rover.status()
+		except AttributeError:
+			pass
+		except:
+			print('[map] failed to fetch rover status')
+			traceback.print_exc()
+
+		try:
+			auto_status = self.autonomy.status()
+		except AttributeError:
+			pass
+		except:
+			print('[map] failed to fetch autonomy status')
+			traceback.print_exc()
+		
+		with self.lock:
+			if rover_status is not None:
+				self.new_rover_status = rover_status
+			if auto_status is not None:
+				self.new_autonomy_status = auto_status
+
 	def _update_status(self):
-		if self.rover is None:
-			return
+		try:
+			with self.lock:
+				if self.new_rover_status is not None:
+					lat, lon = self.new_rover_status['coordinates']
+					heading = math.degrees(self.new_rover_status['heading'])
+					self.rover_updated.emit((lat, lon), heading)
+					self.new_rover_status = None
+		except:
+			print('[map] invalid rover status')
+			traceback.print_exc()
 
-		status = self.rover.get_last_status()
-		lat, lon = status.get('coordinates', (0, 0))
-		heading = math.degrees(status.get('heading', 0))
-		self.rover_updated.emit((lat, lon), heading)
-
-		auto_status = status.get('autonomy', {})
-		self.autonomy_updated.emit(auto_status)
+		try:
+			with self.lock:
+				if self.new_autonomy_status is not None:
+					self.autonomy_updated.emit(self.new_autonomy_status)
+					self.new_autonomy_status = None
+		except:
+			print('[map] invalid autonomy status')
+			traceback.print_exc()
 
 	def _start_auto(self, route):
-		if self.rover is not None:
-			self.rover.set_tasks(route)
-			self.rover.start_auto_from_task(0)
+		if self.autonomy is not None:
+			self.autonomy.set_tasks(route)
+			self.autonomy.start_from_task(0)
 
 	def _stop_auto(self):
-		if self.rover is not None:
-			self.rover.end_auto()
+		if self.autonomy is not None:
+			self.autonomy.end()

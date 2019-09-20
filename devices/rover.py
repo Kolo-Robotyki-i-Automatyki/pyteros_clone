@@ -1,5 +1,5 @@
 
-from devices.zeromq_device import DeviceWorker,DeviceOverZeroMQ,remote,include_remote_methods
+from devices.zeromq_device import DeviceWorker,DeviceInterface,remote,include_remote_methods
 from PyQt5 import QtWidgets,QtCore,QtGui
 from time import perf_counter as clock
 from time import sleep, time
@@ -7,7 +7,6 @@ from collections import deque
 from devices.pid import PID
 #from devices.temphum import DHT22
 from devices.ik import axes_to_arm, axes_to_rover, arm_to_axes, arm_to_rover, rover_to_arm, rover_to_axes
-from devices.autonomy import Autonomy, Command, Task, AutoInput
 from enum import IntEnum
 from scipy import optimize
 import subprocess
@@ -111,7 +110,6 @@ class RoverWorker(DeviceWorker):
         self.logc = 0
         self.script_library = {}
         self.script_is_running = False
-        self.autonomy = Autonomy()
         self.available_devices = {}
         self.rover_reversed = False
         self.cmd_socket = None
@@ -124,7 +122,6 @@ class RoverWorker(DeviceWorker):
         self.data_lock = threading.Lock()
         self.msg_lock = threading.Lock()
         self.position_lock = threading.Lock()
-        self.auto_lock = threading.Lock()
         self.ik_lock = threading.Lock()
 
         self.msg_thread = threading.Thread(target=self.loop_read)
@@ -151,8 +148,6 @@ class RoverWorker(DeviceWorker):
         except:
             self.reach = None
             print("No connection with reach.")
-        self.auto_thread = threading.Thread(target=self.loop_auto)
-        self.auto_thread.start()
 
         self.script_lock = threading.Lock()
         self.script_stop = 0
@@ -225,8 +220,6 @@ class RoverWorker(DeviceWorker):
                 i = s - 180 * 4
 
             d['battery'] = lipo_characteristics[i]
-
-        d['autonomy'] = self.autonomy.get_status()
 
         d['cmd_stream_quality'] = len(self.packet_history) / COMMAND_ID_HISTORY
 
@@ -382,71 +375,6 @@ class RoverWorker(DeviceWorker):
     @remote
     def set_blink(self, on = 1):
         self.blink = on
-
-    def loop_auto(self):
-        while True:
-            try:
-                while True:
-                    if not self.autonomy.is_running():
-                        sleep(0.5)
-                        continue
-
-                    auto_input = AutoInput(
-                        position=self.get_coordinates(),
-                        heading=self.get_orientation(),
-                        script_running=self.is_script_running()
-                    )
-
-                    with self.auto_lock:
-                        cmd_type, args = self.autonomy.get_command(auto_input)
-
-                        print(cmd_type, args)
-
-                        if cmd_type == Command.NOP:
-                            self.drive_both_axes(0.0, 0.0)
-                        elif cmd_type == Command.SET_THROTTLE_TURNING:
-                            throttle, turning = args
-                            self.drive_both_axes(throttle, turning)
-                        elif cmd_type == Command.RUN_SCRIPT:
-                            name, = args[0]
-                            self.run_script(self.script_library[name])
-                            pass
-            except Exception as e:
-                print('loop_auto(): {}'.format(str(e)))
-
-    @remote
-    def auto_set_tasks(self, tasks):
-        try:
-            with self.auto_lock:
-                self.autonomy.set_tasks(tasks)
-        except Exception as e:
-            print('set_tasks(): {}'.format(str(e)))
-
-    @remote
-    def start_auto_from_task(self, task: int = 0):
-        try:
-            with self.auto_lock:
-                self.autonomy.start(task)
-        except Exception as e:
-            print('start_auto_from_task(): {}'.format(str(e)))
-
-    @remote
-    def end_auto(self):
-        print('trying to stop autonomy')
-        try:
-            with self.auto_lock:
-                self.autonomy.halt()
-        except Exception as e:
-            print('end_auto(): {}'.format(str(e)))
-
-    @remote
-    def get_auto_status(self):
-        try:
-            with self.auto_lock:
-                return self.autonomy.get_status()
-        except Exception as e:
-            print('get_auto_status(): {}'.format(str(e)))
-            return '<exception occured>'
 
     @remote
     def get_coordinates(self):
@@ -806,7 +734,6 @@ class RoverWorker(DeviceWorker):
             self.power(130, left)
             self.power(129, right)
 
-
     @remote
     def drive_both_axes(self, throttle, turning):
         self.drive(0, throttle)
@@ -862,7 +789,7 @@ class RoverWorker(DeviceWorker):
 
     
 @include_remote_methods(RoverWorker)
-class Rover(DeviceOverZeroMQ):
+class Rover(DeviceInterface):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.last_status = {}
@@ -1027,15 +954,6 @@ class Rover(DeviceOverZeroMQ):
 		
     def get_last_status(self):
         return self.last_status
-
-
-    def set_waypoints(self, waypoints):
-        tasks = [(Command.DRIVE_TO, (waypoint,)) for waypoint in waypoints]  
-        self.auto_set_tasks(tasks)
-
-    def set_tasks(self, tasks):
-        self.auto_set_tasks(tasks)
-
 
     #def get_position(self, axis):
     #    #with self.data_lock:

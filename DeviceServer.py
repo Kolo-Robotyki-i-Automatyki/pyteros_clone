@@ -27,9 +27,9 @@ class ZMQ_Listener(QtCore.QObject):
         while self.continue_running:
             [address, contents] = self.socket.recv_multipart()
             if address == b'stderr':
-                self.msg_err.emit(contents.decode('ascii'))
+                self.msg_err.emit(contents.decode('utf-8'))
             else:
-                self.msg_info.emit(contents.decode('ascii'))
+                self.msg_info.emit(contents.decode('utf-8'))
         print("stopped")
 
 

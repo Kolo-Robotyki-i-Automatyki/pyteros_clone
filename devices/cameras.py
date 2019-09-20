@@ -1,6 +1,6 @@
 from PyQt5 import QtWidgets, QtGui, QtCore
 
-from devices.zeromq_device import DeviceWorker, DeviceOverZeroMQ, remote, include_remote_methods
+from devices.zeromq_device import DeviceWorker, DeviceInterface, remote, include_remote_methods
 
 import os
 import re
@@ -267,7 +267,7 @@ class CameraServerWorker(DeviceWorker):
 
 
 @include_remote_methods(CameraServerWorker)
-class CameraServer(DeviceOverZeroMQ):
+class CameraServer(DeviceInterface):
 	def __init__(self, req_port=DEFAULT_REQ_PORT, pub_port=DEFAULT_PUB_PORT, **kwargs):
 		super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
 		
@@ -276,21 +276,4 @@ class CameraServer(DeviceOverZeroMQ):
 		self.status_callback = None
 
 	def createDock(self, parentWidget, menu=None):
-		self.createListenerThread(self._update_slot)
-
-	def set_status_callback(self, callback):
-		with self.lock:
-			self.status_callback = callback
-
-	def get_status(self):
-		with self.lock:
-			return self.last_status
-
-	def _update_slot(self, status):
-		with self.lock:
-			self.last_status = status
-
-		try:	
-			self.status_callback(status)
-		except:
-			pass
+		pass
