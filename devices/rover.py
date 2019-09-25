@@ -162,12 +162,12 @@ class RoverWorker(DeviceWorker):
         self.servopos[0] = 1730
         self.servo(0, 1)
 
-        self.cmd_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.cmd_stream_port = COMMAND_STREAM_PORT
-        sock_addr = (self.address, self.cmd_stream_port)
-        self.cmd_socket.bind(sock_addr)
-        self.cmd_stream_loop = threading.Thread(target=self.loop_cmd_stream)
-        self.cmd_stream_loop.start()
+        # self.cmd_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # self.cmd_stream_port = COMMAND_STREAM_PORT
+        # sock_addr = (self.address, self.cmd_stream_port)
+        # self.cmd_socket.bind(sock_addr)
+        # self.cmd_stream_loop = threading.Thread(target=self.loop_cmd_stream)
+        # self.cmd_stream_loop.start()
 
         #self.tag_reader = TagReader()
 

@@ -14,7 +14,7 @@ DEFAULT_REQ_PORT = 13210
 DEFAULT_PUB_PORT = 13211
 
 VIDEO_FILES_DIR = os.path.expanduser('~/pyteros_vid')
-VIDEO_LEN_NS = 300_000_000_000
+VIDEO_LEN_NS = 300000000000
 
 RE_INDEX = re.compile(r"\s*Index\s*:\s([0-9]+)\s*")
 RE_TYPE = re.compile(r"\s*Type\s*:\s*(.*)\s*")
