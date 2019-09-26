@@ -142,6 +142,10 @@ if __name__ == '__main__':
         
         window.kernel_client.execute('import time')
         window.kernel_client.execute('import numpy as np')
+        window.kernel_client.execute('import zmq')
+        window.kernel_client.execute('ctx = zmq.Context()')
+        window.kernel_client.execute('from DeviceServerHeadless import *')
+        window.kernel_client.execute('device_server = DeviceServerWrapper(ctx)')
         
         # device_server = DeviceServer()
         # try:

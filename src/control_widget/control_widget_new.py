@@ -222,6 +222,8 @@ class ControlConfigWidget(QtWidgets.QWidget):
         self.requests_queue.put((RequestType.find_motors,))
 
     def _upload_config(self):
+        self.save_settings()
+
         with self.lock:
             motors = []
             for description, method, axis in self.motors:
@@ -334,7 +336,7 @@ class ControlConfigWidget(QtWidgets.QWidget):
         mappings = self.settings.get('mappings') or []
 
         self.motors = motors
-        for (current_index, inverted, maxval, minval, smooth), config_row in zip(mappings, self.config_rows):
+        for (current_index, inverted, minval, maxval, smooth), config_row in zip(mappings, self.config_rows):
             _, combo, checkInverted, editSpeedMax, editSpeedMin, editSmooth = config_row
             combo.clear()
             combo.addItem('None')

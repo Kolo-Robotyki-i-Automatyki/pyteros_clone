@@ -1,6 +1,7 @@
 import collections
 import itertools
 import math
+import queue
 import threading
 import time
 import typing
@@ -102,9 +103,11 @@ class ControlWorker(DeviceWorker):
         from DeviceServerHeadless import DeviceServerWrapper
 
         self.lock = threading.Lock()
+        self.input_queue = queue.Queue()
 
         self.device_server = DeviceServerWrapper(self.zmq_context)
         self.reconnect_thread = self.start_timer(self._reconnect, RECONNECT_PERIOD_S)
+        threading.Thread(target=self._input_loop, daemon=True).start()
 
     def destroy_device(self):
         self.reconnect_thread.stop()
@@ -133,9 +136,33 @@ class ControlWorker(DeviceWorker):
                 if gamepad is not None:
                     print('[control] connecting to {}'.format(gamepad.__class__.__name__))
                     self.gamepad = gamepad
-                    self.gamepad.create_listener_thread(self._process_input)
+                    self.gamepad.create_listener_thread(self._recv_input)
 
-    def _process_input(self, state_raw):
+    def _recv_input(self, state_raw):
+        # print('raw state from xbox: {}'.format(state_raw))
+        self.input_queue.put(state_raw)
+
+    def _input_loop(self):
+        while True:
+            try:
+                self._process_last_input()
+            except:
+                traceback.print_exc()
+
+            time.sleep(0.03)
+
+    def _process_last_input(self):
+        state_raw = None
+        while True:
+            try:
+                state_raw = self.input_queue.get_nowait()
+                # print('state: {}'.format(state_raw))
+            except queue.Empty:
+                break
+
+        if state_raw is None:
+            return
+
         try:
             if not self.active:
                 return
@@ -143,6 +170,8 @@ class ControlWorker(DeviceWorker):
             rover = self.rover
             if rover is None:
                 return
+
+            # print(state_raw)
 
             try:
                 boost = (1 - state_raw['left_trigger']) * (1 + state_raw['right_trigger'])
