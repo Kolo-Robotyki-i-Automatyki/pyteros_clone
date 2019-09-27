@@ -3,6 +3,7 @@
 import sys
 from time import sleep
 import threading
+import traceback
 from inputs import devices
 from ..zeromq_device import DeviceWorker, DeviceInterface, remote, include_remote_methods
 
@@ -42,20 +43,29 @@ class XBoxWorker(DeviceWorker):
         for axis in self.axes:
             self.values[axis] = 0
 
+        self.gamepad = None
+
         print('nice init')
 
     def init_device(self):
-        self.gamepad = devices.gamepads[self.device_number]
-        try:
-            self.gamepad.set_vibration(1, 1)
-            sleep(0.5)
-            self.gamepad.set_vibration(0, 0)
-        except Exception:
-            pass
-
-        print("Pad no. " + str(self.device_number + 1) + " is now connected.")
         self.state_lock = threading.Lock()
+
+        threading.Thread(target=self._reconnect, daemon=True).start()
         threading.Thread(target=self._state_loop, daemon=True).start()
+
+    def _reconnect(self):
+        while True:
+            try:
+                self.gamepad = devices.gamepads[self.device_number]
+                self.gamepad.set_vibration(1, 1)
+                sleep(0.5)
+                self.gamepad.set_vibration(0, 0)
+                print("Pad no. " + str(self.device_number + 1) + " is now connected.")
+                break
+            except:
+                traceback.print_exc()
+
+            sleep(3.0)
 
     def _state_loop(self):
         while True:

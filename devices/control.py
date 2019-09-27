@@ -12,6 +12,7 @@ from devices.zeromq_device import DeviceWorker, DeviceInterface
 from devices.zeromq_device import remote, include_remote_methods
 
 from src.common.misc import *
+from src.common.settings import *
 
 
 EPSILON = 0.00000001
@@ -108,6 +109,16 @@ class ControlWorker(DeviceWorker):
         self.device_server = DeviceServerWrapper(self.zmq_context)
         self.reconnect_thread = self.start_timer(self._reconnect, RECONNECT_PERIOD_S)
         threading.Thread(target=self._input_loop, daemon=True).start()
+
+        self.settings = Settings('control')
+        threading.Thread(target=self._delayed_config).start()
+
+    def _delayed_config(self):
+        time.sleep(5.0)
+        config = self.settings.get('config')
+        print('settings: {}'.format(config))
+        self.configure(config)
+        self.start_control()
 
     def destroy_device(self):
         self.reconnect_thread.stop()
@@ -210,6 +221,8 @@ class ControlWorker(DeviceWorker):
 
     @remote
     def configure(self, config):
+        self.settings.set('config', config)
+
         with self.lock:
             rover = self.rover
             if rover is None:

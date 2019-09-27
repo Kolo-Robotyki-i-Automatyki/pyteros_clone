@@ -19,6 +19,7 @@ from devices.rover import RoverWorker, Rover
 from devices.zeromq_device import remote, include_remote_methods
 from devices.zeromq_device import DeviceWorker, DeviceInterface, PublisherTopic
 from src.common.misc import NumpyArrayEncoder, NumpyArrayDecoder
+from src.common.settings import *
 
 
 SERVER_DISCOVERY_PORT = 51001
@@ -116,6 +117,12 @@ class DeviceServerWorker(DeviceWorker):
 
         self.start_periodic_task(self._discover_hosts, self._update_hosts, SERVER_DISCOVERY_PERIOD_S)
  
+        self.settings = Settings('device_server')
+        startup_devices = self.settings.get('devices') or []
+        for dev_type in startup_devices:
+            print('starting {}'.format(DeviceType(dev_type).name))
+            self.start_device(dev_type)
+
     def destroy_device(self):
         for name, dev_info in self.local_devices.items():
             try:
