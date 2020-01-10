@@ -45,6 +45,33 @@ class RestartAction(QtWidgets.QAction):
         self.window.restart_page(self.page_name)
 
 
+class DeviceFinder(QtCore.QObject):
+    found_devices = QtCore.pyqtSignal(list)
+
+    def __init__(self, device_server, parent=None):
+        super().__init__(parent)
+        self.known_devices = []
+        self.device_server = device_server;
+
+    @QtCore.pyqtSlot()
+    def find_devices(self):
+         while True:
+            try:
+                devices = self.device_server.devices()
+                new_devs = []
+                for dev in devices:
+                    id = dev.name + '@' + dev.hostname;
+                    if id not in self.known_devices:
+                        self.known_devices.append(id)
+                        new_devs.append(dev)
+                if len(new_devs) > 0:
+                    self.found_devices.emit(new_devs)
+            except:
+                traceback.print_exc()
+
+            time.sleep(1.0)
+
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -57,7 +84,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setupIcons()
 
         self.tabs = {}
-        
+
         quitAct = QtWidgets.QAction("&Quit", self);
         quitAct.setShortcuts(QtGui.QKeySequence.Quit)
         quitAct.setStatusTip("Quit the application")
@@ -72,6 +99,21 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.controlMenu = self.menuBar().addMenu("&Devices")
         self.setGeometry(100, 40, self.width(), 1000)
+
+        self.finder = DeviceFinder(self.device_server)
+        self.finder_thread = QtCore.QThread()
+        self.finder.moveToThread(self.finder_thread)
+        self.finder.found_devices.connect(self._create_dock)
+        self.finder_thread.started.connect(self.finder.find_devices)
+        self.finder_thread.start()
+
+    def _create_dock(self, devices):
+        try:
+            for dev in devices:
+                dev.interface(self.zmq_context).createDock(self, self.controlMenu)
+                print('[InteractiveControl] created dock for {}'.format(id))
+        except:
+            traceback.print_exc()
 
     def createConsoleTab(self):
         """ Initialize a python console and return its widget """

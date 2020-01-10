@@ -45,8 +45,6 @@ class XBoxWorker(DeviceWorker):
 
         self.gamepad = None
 
-        print('nice init')
-
     def init_device(self):
         self.state_lock = threading.Lock()
 
@@ -55,15 +53,16 @@ class XBoxWorker(DeviceWorker):
 
     def _reconnect(self):
         while True:
-            try:
-                self.gamepad = devices.gamepads[self.device_number]
-                self.gamepad.set_vibration(1, 1)
-                sleep(0.5)
-                self.gamepad.set_vibration(0, 0)
-                print("Pad no. " + str(self.device_number + 1) + " is now connected.")
-                break
-            except:
-                traceback.print_exc()
+            if self.gamepad is None:
+                try:
+                    self.gamepad = devices.gamepads[self.device_number]
+                    self.gamepad.set_vibration(1, 1, 0.5)
+                    sleep(0.5)
+                    self.gamepad.set_vibration(0, 0, 0.5)
+                    print("Pad no. " + str(self.device_number + 1) + " is now connected.")
+                    break
+                except:
+                    traceback.print_exc()
 
             sleep(3.0)
 
@@ -102,7 +101,7 @@ class XBoxWorker(DeviceWorker):
 
     @remote
     def set_vibration(self, left_motor, right_motor):
-        self.gamepad.set_vibration(left_motor, right_motor)
+        self.gamepad.set_vibration(left_motor, right_motor, 0.5)
 
     def status(self):
         # print('xbox status()')
