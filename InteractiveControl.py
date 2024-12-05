@@ -23,7 +23,7 @@ class MainWindow(QtWidgets.QMainWindow):
         fileMenu = self.menuBar().addMenu("&File")
         fileMenu.addAction(quitAct)        
         self.controlMenu = self.menuBar().addMenu("&Devices")
-        self.resize(self.width(), 800)
+        self.setGeometry(1100, 40, self.width(), 1000)
     
     def createConsoleTab(self):
         """ Initialize a python console and return its widget """
@@ -115,24 +115,32 @@ if __name__ == '__main__':
             traceback.print_exc(file=sys.stdout)
             
         try:
-            from src import map_widget
+            from devices.misc import joystick_control2
+            w = joystick_control2.JoystickControlWidget(devices.active_devices)
+            window.addPage(w, "Pad 2 control")
+        except NoRequiredDevicesError:
+            pass
+        except Exception as e:
+            traceback.print_exc(file=sys.stdout)
+            
+        try:
+            from src.map_widget import map_widget
             w = map_widget.MapWidget(devices.active_devices)
             window.addPage(w, "Map")
         except NoRequiredDevicesError:
             pass
         except Exception as e:
             traceback.print_exc(file=sys.stdout)
-        
+
         try:
-            from src import tab_anisotropy
-            w = tab_anisotropy.AnisotropyTab()
-            window.addPage(w, "Anisotropy")
+            from devices.misc import ik_scripter
+            w = ik_scripter.IKScripterWidget(devices.active_devices)
+            window.addPage(w, "IK Scripter")
         except NoRequiredDevicesError:
             pass
         except Exception as e:
             traceback.print_exc(file=sys.stdout)
-                
-                
+
         window.show()
         app.exec_()
                 

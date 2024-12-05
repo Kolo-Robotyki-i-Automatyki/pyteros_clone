@@ -176,19 +176,6 @@ class ANC350(DeviceOverZeroMQ):
         layout.setSpacing(2)
         widget.setLayout(layout)
 
-        '''
-        self.connectButton = QtWidgets.QPushButton("Connect", parentWidget)
-        self.connectButton.setCheckable(True)
-
-        def onButtonToggled(state):
-            if state:
-                self.connectToDevice()
-            else:
-                self.disconnectFromDevice()
-
-        self.connectButton.toggled.connect(onButtonToggled)
-        layout.addWidget(self.connectButton)
-        '''
         self.axis_widgets = {axis: self.createWidgetForAxis(layout, axis)
                         for axis in self.axes()}
 
@@ -203,7 +190,7 @@ class ANC350(DeviceOverZeroMQ):
     def createWidgetForAxis(self, layout, axis):
         hLayout = QtWidgets.QHBoxLayout(layout.parent())
         line = QtWidgets.QFrame()
-        line.setFrameShape(QtWidgets.QFrame.VLine)
+        line.setFrameShape(QtWidgets.QFrame.HLine)
         line.setFrameShadow(QtWidgets.QFrame.Sunken)
         layout.addWidget(line)
         label = QtWidgets.QLabel("Axis " + str(axis))

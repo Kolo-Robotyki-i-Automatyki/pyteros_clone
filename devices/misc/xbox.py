@@ -23,62 +23,7 @@ import json
 
 from ..zeromq_device import DeviceWorker,DeviceOverZeroMQ,remote,include_remote_methods
 
-# structs according to
-# http://msdn.microsoft.com/en-gb/library/windows/desktop/ee417001%28v=vs.85%29.aspx
-
-
-class XINPUT_GAMEPAD(ctypes.Structure):
-    _fields_ = [
-        ('buttons', ctypes.c_ushort),  # wButtons
-        ('left_trigger', ctypes.c_ubyte),  # bLeftTrigger
-        ('right_trigger', ctypes.c_ubyte),  # bLeftTrigger
-        ('l_thumb_x', ctypes.c_short),  # sThumbLX
-        ('l_thumb_y', ctypes.c_short),  # sThumbLY
-        ('r_thumb_x', ctypes.c_short),  # sThumbRx
-        ('r_thumb_y', ctypes.c_short),  # sThumbRy
-    ]
-
-
-class XINPUT_STATE(ctypes.Structure):
-    _fields_ = [
-        ('packet_number', ctypes.c_ulong),  # dwPacketNumber
-        ('gamepad', XINPUT_GAMEPAD),  # Gamepad
-    ]
-
-
-class XINPUT_VIBRATION(ctypes.Structure):
-    _fields_ = [("wLeftMotorSpeed", ctypes.c_ushort),
-                ("wRightMotorSpeed", ctypes.c_ushort)]
-
-class XINPUT_BATTERY_INFORMATION(ctypes.Structure):
-    _fields_ = [("BatteryType", ctypes.c_ubyte),
-                ("BatteryLevel", ctypes.c_ubyte)]
-
-try:
-    xinput = ctypes.windll.xinput1_3
-except:
-    try:
-        xinput = ctypes.windll.xinput1_4
-    except:
-        xinput = ctypes.windll.xinput9_1_0  # this is the Win 8 version ?
-
-# xinput1_2, xinput1_1 (32-bit Vista SP1)
-# xinput1_3 (64-bit Vista SP1)
-
-
-def struct_dict(struct):
-    """
-    take a ctypes.Structure and return its field/value pairs
-    as a dict.
-    >>> 'buttons' in struct_dict(XINPUT_GAMEPAD)
-    True
-    >>> struct_dict(XINPUT_GAMEPAD)['buttons'].__class__.__name__
-    'CField'
-    """
-    get_pair = lambda field_type: (
-        field_type[0], getattr(struct, field_type[0]))
-    return dict(list(map(get_pair, struct._fields_)))
-
+import inputs
 
 def get_bit_values(number, size=32):
     """
@@ -124,7 +69,7 @@ class XBoxWorker(DeviceWorker):
     def __init__(self, req_port = default_req_port, pub_port = default_pub_port, **kwargs):
         self.device_number = 0
         super().__init__(req_port = req_port, pub_port = pub_port, **kwargs)
-
+        self._gamepad = inputs.devices.gamepads[0]
         self._last_state = self.get_state()
         self.received_packets = 0
         self.missed_packets = 0
@@ -133,11 +78,14 @@ class XBoxWorker(DeviceWorker):
         #  the values for analog axis.
         choices = [self.translate_identity, self.translate_using_data_size]
         self.translate = choices[True]
+        #self._gamepad = inputs.devices.gamepads[0]
 
     def init_device(self):
-        battery = self.get_battery_information()
-        print(battery)
-
+        return
+        #self._gamepad = inputs.devices.gamepads[0]
+        #battery = self.get_battery_information()
+        #print(battery)
+        
     def translate_using_data_size(self, value, data_size):
         # normalizes analog data to [0,1] for unsigned data
         #  and [-0.5,0.5] for signed data
@@ -149,14 +97,8 @@ class XBoxWorker(DeviceWorker):
 
     def get_state(self):
         "Get the state of the controller represented by this object"
-        state = XINPUT_STATE()
-        res = xinput.XInputGetState(self.device_number, ctypes.byref(state))
-        if res == ERROR_SUCCESS:
-            return state
-        if res != ERROR_DEVICE_NOT_CONNECTED:
-            raise RuntimeError(
-                "Unknown error %d attempting to get state of device %d" % (res, self.device_number))
-        # else return None (device is not connected)
+        state = self._gamepad._GamePad__read_device().gamepad
+        return state
 
     @remote
     def is_connected(self):
@@ -250,7 +192,7 @@ class XBoxWorker(DeviceWorker):
         button_numbers = count(1)
         for c,n,s in zip(changed, button_numbers, buttons_state):
             d["button%d" % n] = s
-
+        print(d)
         self._last_state = state
         return d
 

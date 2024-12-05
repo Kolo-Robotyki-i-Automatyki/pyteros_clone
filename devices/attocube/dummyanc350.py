@@ -15,8 +15,7 @@ default_pub_port = 7007
 class DummyANC350Worker(DeviceWorker):
     def __init__(self, req_port=default_req_port, pub_port=default_pub_port, **kwargs):
         self.rate = 0.04
-        super().__init__(req_port=req_port, pub_port=pub_port, refresh_rate=self.rate)
-        self.connected = False
+        super().__init__(req_port=req_port, pub_port=pub_port, **kwargs)
 
     def loop(self):
         for i in range(NO_OF_AXES):
@@ -31,13 +30,10 @@ class DummyANC350Worker(DeviceWorker):
         return d
 
     def init_device(self):
-        print("init_device")
         # self.timer = QtCore.QTimer()
         # self.timer.setInterval(50)
         # self.timer.timeout.connect(self.loop)
         # self.timer.start()
-        if self.connected:
-            return
         self.connected = True
         self.position = [2000, 2000, 2000, 2000]
         self.frequency = [0, 0, 0, 0]

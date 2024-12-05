@@ -6,60 +6,75 @@ from PyQt5 import QtCore,QtWidgets,QtGui
 import jsonpickle
 from ..misc.xbox import XBoxPad
 import time
-
-dead_zone = 0.15
-
+from collections import deque
+import itertools
+epsilon = 0.00000001
+dead_zone = 0.08
 class Master():
-    def __init__(self, axis_id, combo, checkInverted, editSpeed):
+    def __init__(self, axis_id, combo, checkInverted, editSpeedMax, editSpeedMin, editSpeedSmooth):
         self.axis_id = axis_id
         self.comboRecentValid = ""
         self.combo = combo
         self.checkInverted = checkInverted
-        self.editSpeed = editSpeed
+        self.editSpeedMax = editSpeedMax
+        self.editSpeedMin = editSpeedMin
+        self.editSpeedSmooth = editSpeedSmooth
+        self.lastvals = deque([0 for i in range(101)])
 
     def dump(self): #serializes parameters
         self.comboRecentValid = self.combo.currentText()
-        return (self.comboRecentValid, self.checkInverted.isChecked(), self.editSpeed.text())
+        return (self.comboRecentValid, self.checkInverted.isChecked(), self.editSpeedMax.text(), self.editSpeedMin.text(), self.editSpeedSmooth.text())
 
     def restore(self, params):
         self.comboRecentValid = params[0]
         self.checkInverted.setChecked(params[1])
-        self.editSpeed.setText(params[2])
+        self.editSpeedMax.setText(params[2])
+        self.editSpeedMin.setText(params[3])
+        self.editSpeedSmooth.setText(params[4])
 
 class Slave():
-    def __init__(self, device, description, axis=None, step=False):
+    def __init__(self, device, description, axis=None, step = False, method="power"):
         self.device = device
         self.description = description
         self.axis = axis
         self.step = step
+        self.method = getattr(device, method)
         self.velocity = 0
+        self.last_velocity = 0
         self.last_direction = 0
 
     def execute(self):
-        if self.step == False:  #continous movement
-            if self.axis != None:
-                self.device.moveVelocity(self.axis, self.velocity)
+        try:
+            if self.velocity == self.last_velocity and abs(self.velocity) < 0.000001:# and not(self.axis == 190 or self.axis == 191 or self.axis == 201 or self.axis == 200):
                 self.velocity = 0
-            else:
-                self.device.moveVelocity(self.velocity)
-                self.velocity = 0
-        else:                   #step movement
-            if self.velocity < 0:
-                self.direction = -1
-            elif self.velocity > 0:
-                self.direction = 1
-            else:
-                self.direction = 0
-
-            if self.direction != 0 and self.direction != self.last_direction:
+                return
+            self.last_velocity = self.velocity
+            if self.step == False:  #continous movement
                 if self.axis != None:
-                    self.device.moveSteps(self.axis, self.direction)
+                    self.method(self.axis, self.velocity)
                     self.velocity = 0
                 else:
-                    self.device.moveSteps(self.direction)
+                    self.method(self.velocity)
                     self.velocity = 0
-            self.last_direction = self.direction
-            self.velocity = 0
+            else:                   #step movement
+                if self.velocity < 0:
+                    self.direction = -1
+                elif self.velocity > 0:
+                    self.direction = 1
+                else:
+                    self.direction = 0
+
+                if self.direction != 0 and self.direction != self.last_direction:
+                    if self.axis != None:
+                        self.device.moveSteps(self.axis, self.direction)
+                        self.velocity = 0
+                    else:
+                        self.device.moveSteps(self.direction)
+                        self.velocity = 0
+                self.last_direction = self.direction
+                self.velocity = 0
+        except Exception:
+            print("error sending")
 
     def add_change(self, v):
         self.velocity += v
@@ -86,29 +101,47 @@ class JoystickControlWidget(QtWidgets.QWidget):
         self.timer.setSingleShot(5000)
         self.timer.timeout.connect(self.timeout)
         self.active = False
-        
-        self._createWidgets()
-        self.loadSettings()
-        
-    axes =  [("l_thumb_x", "Left stick horizontal"),
+
+        self.axes =  [("l_thumb_x", "Left stick horizontal"),
              ("l_thumb_y", "Left stick vertical"),
              ("r_thumb_x", "Right stick horizontal"),
              ("r_thumb_y", "Right stick vertical"),
-             ('left_trigger', "Left trigger"),
-             ('right_trigger', "Right trigger"),
-             ("button1", "D-pad up button"),
-             ("button2", "D-pad down button"),
-             ("button4", "D-pad right button"),
-             ("button3", "D-pad left button"),
+             #('left_trigger', "Left trigger"),
+             #('right_trigger', "Right trigger"),
+             ("button4", "D-pad horizontal"),
+             ("button1", "D-pad vertical"),
              ("button5", "START (arrow right)"),
              ("button6", "BACK (arrow left)"),
              ("button7", "Left stick button"),
              ("button8", "Right stick button"),
+             #("button9", "Left trigger button"),
+             ("button10", "Right trigger button"),
              ("button16" ,"Y button"),
              ("button13" ,"A button"),
              ("button14" ,"B button"),
-             ("button15" ,"X button")]
-    
+             ("button15" ,"X button"),
+             ("alt_l_thumb_x", "Alt Left stick horizontal"),
+             ("alt_l_thumb_y", "Alt Left stick vertical"),
+             ("alt_r_thumb_x", "Alt Right stick horizontal"),
+             ("alt_r_thumb_y", "Alt Right stick vertical"),
+             # ('alt_left_trigger', "Alt Left trigger"),
+             # ('alt_right_trigger', "Alt Right trigger"),
+             ("alt_button4", "Alt D-pad horizontal"),
+             ("alt_button1", "Alt D-pad vertical"),
+             ("alt_button5", "Alt START (arrow right)"),
+             ("alt_button6", "Alt BACK (arrow left)"),
+             ("alt_button7", "Alt Left stick button"),
+             ("alt_button8", "Alt Right stick button"),
+             # ("alt_button9", "Left trigger button"),
+             ("alt_button10", "Alt Right trigger button"),
+             ("alt_button16", "Alt Y button"),
+             ("alt_button13", "Alt A button"),
+             ("alt_button14", "Alt B button"),
+             ("alt_button15", "Alt X button")]
+
+        self._createWidgets()
+        self.loadSettings()
+
 
     def refreshCombos(self):
         for master in self.masters:
@@ -126,11 +159,16 @@ class JoystickControlWidget(QtWidgets.QWidget):
         self.start(False)
         self.slaves = []
         try:
-            from ..thorlabs.apt import APT
-            for name, apt in {k: v for k, v in self.device_list.items() if isinstance(v, APT)}.items():
-                for serial in apt.devices():
-                    description = "Thorlabs APT %s s/n: %d" % (name, serial)
-                    self.slaves.append(Slave(apt, description, serial, step=False))
+            from ..can import Can
+            for devname, can in {k: v for k, v in self.device_list.items() if isinstance(v, Can)}.items():
+                for name, id in can.axes():
+                    description = name + "(" + str(id) + ")"
+                    self.slaves.append(Slave(can, description, id, step=False, method="power"))
+                for name, id in can.servos():
+                    description = name + "(" + str(id) + ")"
+                    self.slaves.append(Slave(can, description, id, step=False, method="servo"))
+                self.slaves.append(Slave(can, "throttle", 0, step=False, method="drive"))
+                self.slaves.append(Slave(can, "turning right", 1, step=False, method="drive"))
         except Exception as e:
             print(e)
 
@@ -139,9 +177,9 @@ class JoystickControlWidget(QtWidgets.QWidget):
             for name, anc350 in {k: v for k, v in self.device_list.items() if isinstance(v, ANC350)}.items():
                 for axis in anc350.axes():
                     description = "Attocube %s axis: %d" % (name, axis)
-                    self.slaves.append(Slave(anc350, description, axis, step=False))
-                    description_step = "Attocube %s axis: %d single step" % (name, axis)
-                    self.slaves.append(Slave(anc350, description_step, axis, step=True))
+                    self.slaves.append(Slave(anc350, description, axis, step=False, method="moveVelocity"))
+                    #description_step = "Attocube %s axis: %d single step" % (name, axis)
+                    #self.slaves.append(Slave(anc350, description_step, axis, step=True))
         except Exception as e:
             print(e)
 
@@ -161,11 +199,22 @@ class JoystickControlWidget(QtWidgets.QWidget):
             layout.addWidget(QtWidgets.QLabel("Inv.:"), row, 2)
             checkInverted = QtWidgets.QCheckBox();
             layout.addWidget(checkInverted, row, 3)
-            layout.addWidget(QtWidgets.QLabel("Multiplier:"), row, 4)
-            editSpeed = QtWidgets.QLineEdit()
-            editSpeed.setValidator(QtGui.QDoubleValidator())
-            layout.addWidget(editSpeed, row, 5)
-            self.masters.append( Master(axis_id, combo, checkInverted, editSpeed) )
+            layout.addWidget(QtWidgets.QLabel("Max:"), row, 4)
+            editSpeedMax = QtWidgets.QLineEdit()
+            editSpeedMax.setFixedWidth(60)
+            editSpeedMax.setValidator(QtGui.QDoubleValidator())
+            layout.addWidget(editSpeedMax, row, 5)
+            layout.addWidget(QtWidgets.QLabel("Min:"), row, 6)
+            editSpeedMin = QtWidgets.QLineEdit()
+            editSpeedMin.setFixedWidth(60)
+            editSpeedMin.setValidator(QtGui.QDoubleValidator())
+            layout.addWidget(editSpeedMin, row, 7)
+            layout.addWidget(QtWidgets.QLabel("Smooth:"), row, 8)
+            editSpeedSmooth = QtWidgets.QLineEdit()
+            editSpeedSmooth.setFixedWidth(60)
+            editSpeedSmooth.setValidator(QtGui.QDoubleValidator())
+            layout.addWidget(editSpeedSmooth, row, 9)
+            self.masters.append( Master(axis_id, combo, checkInverted, editSpeedMax, editSpeedMin, editSpeedSmooth) )
 
         buttonlayout = QtWidgets.QHBoxLayout()
         self.refreshButton = QtWidgets.QPushButton("Refresh")
@@ -202,14 +251,11 @@ class JoystickControlWidget(QtWidgets.QWidget):
         if activate:
             self.startButton.setText("Stop control")
             self.startButton.setChecked(True)
-            for master in self.masters:
-                master.combo.setDisabled(True)
             self.timer.start()
         else:
             self.startButton.setText("Start control")
             self.startButton.setChecked(False)
             for master in self.masters:
-                master.combo.setEnabled(True)
                 slave_nr = master.combo.currentIndex() - 1
                 if slave_nr >= 0:
                     self.slaves[slave_nr].execute() # set zero value
@@ -217,28 +263,36 @@ class JoystickControlWidget(QtWidgets.QWidget):
     def timeout(self):
         if not self.active:
             return
-        state = self.xbox.currentStatus()
+        state_raw = self.xbox.currentStatus()
         boost = 1
+        if state_raw["connected"]:
+            boost *= (1 - state_raw["left_trigger"])
+            boost *= (1 + state_raw["right_trigger"])
 
-        if state["connected"]:
-            if state["button9"]:
-                boost *= 10
-            if state["button10"]:
-                boost *= 10
-        else:
-            boost = 1
+        state = {}
+        alt = (state_raw['button9'] > 0)
+        for axis in state_raw:
+            if axis == 'connected':
+                state['connected'] = state_raw['connected']
+                continue
+            if alt:
+                state['alt_' + axis] = state_raw[axis]
+                state[axis] = 0
+            else:
+                state['alt_' + axis] = 0
+                state[axis] = state_raw[axis]
 
         for master in self.masters:
+            #print(master.axis_id)
             if master.axis_id not in state:
                 continue
-
             if state["connected"]:
                 value = state[master.axis_id]
             else:
                 value = 0
-
-            if master.axis_id in ["l_thumb_x", "l_thumb_y", "r_thumb_x", "r_thumb_y"]:
-                value *= 2
+            #print(value)
+            if master.axis_id in ["l_thumb_x", "l_thumb_y", "r_thumb_x", "r_thumb_y",
+                                  "alt_l_thumb_x", "alt_l_thumb_y", "alt_r_thumb_x", "alt_r_thumb_y"]:
                 if abs(value) < dead_zone:
                     value = 0
                 else:
@@ -247,8 +301,36 @@ class JoystickControlWidget(QtWidgets.QWidget):
             if master.checkInverted.isChecked():
                 value = -value
 
-            if len(master.editSpeed.text()) != 0:
-                value *= float(master.editSpeed.text()) * boost
+            minv = 0
+            maxv = 1
+            smooth = 0
+            try:
+                maxv = float(master.editSpeedMax.text())
+            except Exception as e:
+                pass
+            try:
+                minv = float(master.editSpeedMin.text())
+            except Exception as e:
+                pass
+            try:
+                smooth = float(master.editSpeedSmooth.text())
+            except Exception as e:
+                pass
+
+            value *= boost
+            if value > epsilon:
+                value = minv + (maxv - minv) * value
+            if value < -epsilon:
+                value = -minv + (maxv - minv) * value
+
+            smooth = round(smooth)
+            if smooth < 0:
+                smooth = 0
+            if smooth > 100:
+                smooth = 100
+            master.lastvals.rotate(1)
+            master.lastvals[0] = value
+            value = sum(list(itertools.islice(master.lastvals, 0, smooth + 1))) / (smooth + 1)
 
 
             slave_nr = master.combo.currentIndex() - 1
@@ -258,4 +340,4 @@ class JoystickControlWidget(QtWidgets.QWidget):
         for slave in self.slaves:
             slave.execute()
 
-        self.timer.start(80)
+        self.timer.start(40)

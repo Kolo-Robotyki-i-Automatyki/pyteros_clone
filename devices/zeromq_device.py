@@ -113,7 +113,7 @@ class Logger():
 
 
 class DeviceWorker(Process):
-    def __init__(self, req_port=0, pub_port=0, refresh_rate=0.2):
+    def __init__(self, req_port=0, pub_port=0, refresh_rate=0.1):
         if not req_port or not pub_port:
             raise Exception("Ports not specified for class: %s" % self.__name__)
         self.REQchannel = "tcp://*:" + str(req_port)

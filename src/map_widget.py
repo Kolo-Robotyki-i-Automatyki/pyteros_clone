@@ -6,12 +6,16 @@ from PyQt5 import QtWidgets, QtGui, QtCore, QtSvg
 from collections import OrderedDict
 import jsonpickle
 import numpy
+from devices.can import Can
 
 epsilon = 0.000000001
+
+
 
 class ZoomableGraphicsView(QtWidgets.QGraphicsView):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.parent = parent
         # self.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
         self.setMouseTracking(True)
         self.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
@@ -116,6 +120,15 @@ def _create_anc350_poll(anc350, name, axis):
     return ("Attocube %s axis: %d" % (name, axis), f)
 
 
+def _create_can_poll(can, name, axis):
+    """Creates a pair of a name and a function to get stage position """
+
+    def f():
+        return can.get_position(axis)
+
+    return ("%s position: %d" % (name, axis), f)
+
+
 class AnchorItem(QtWidgets.QGraphicsItemGroup):
     def __init__(self, parent, real_pos):
         super().__init__(parent)
@@ -184,11 +197,18 @@ class SampleImageItem(QtWidgets.QGraphicsPixmapItem):
 
     def contextMenuEvent(self, event):
         menu = QtWidgets.QMenu()
+        fix_action = menu.addAction("Fix rover position")
         add_anchor_action = menu.addAction("Anchor this point")
         remove_action = menu.addAction("Remove map")
         selected_action = menu.exec(event.screenPos())
         if selected_action == remove_action:
             pass
+        elif selected_action == fix_action:
+            pos = event.scenePos()
+            try:
+                self.parent.can.fix_pos(pos.x(), pos.y())
+            except Exception:
+                print("Cant communicate")
         elif selected_action == add_anchor_action:
             dialog = QtWidgets.QDialog()
             dialog.setWindowTitle("Anchor this point")
@@ -606,7 +626,7 @@ class MapWidget(QtWidgets.QWidget):
         self.setLayout(layout)
         hlayout1 = QtWidgets.QHBoxLayout() # horizontal layout for graphics view and mapping
         layout.addLayout(hlayout1)
-        self.viewwidget = ZoomableGraphicsView()
+        self.viewwidget = ZoomableGraphicsView(self)
         self.setupScene()
 
 
@@ -698,6 +718,9 @@ class MapWidget(QtWidgets.QWidget):
         hlayout4.addWidget(self.startButton)
         hlayout4.addStretch(1)
         layout.addLayout(hlayout4)
+
+        self.can = Can(req_port=10200, pub_port=10201, host="10.1.1.200")
+        self.slopepoints = []
 
     def delete_duplicated_points(self, points):
         order_function =  lambda p: p[0] * 100 * numpy.pi + p[1]
@@ -829,6 +852,22 @@ class MapWidget(QtWidgets.QWidget):
         except Exception as e:
             print(e)
 
+        try:
+            from devices.can import Can
+            for name, can in {k: v for k, v in self.device_list.items() if isinstance(v, Can)}.items():
+                self.pools.append(_create_can_poll(can, "x", 0))
+                self.pools.append(_create_can_poll(can, "y", 1))
+        except Exception as e:
+            print(e)
+
+        '''from ..can import Can
+            for devname, can in {k: v for k, v in self.device_list.items() if isinstance(v, Can)}.items():
+                for name, id in can.axes():
+                    description = name + "(" + str(id) + ")"
+                    self.slaves.append(Slave(can, description, id, step=False, method="power"))
+                self.slaves.append(Slave(can, "throttle", 0, step=False, method="drive"))
+                self.slaves.append(Slave(can, "turning right", 1, step=False, method="drive"))'''
+
         for direction, combo in self.combos.items():
             n = combo.currentIndex()
             combo.clear()
@@ -841,15 +880,86 @@ class MapWidget(QtWidgets.QWidget):
 
     def timeout(self):
         if self.active:
+            try:
+                for point in self.slopepoints:
+                    self.scene.removeItem(point)
+                    del point
+            except Exception:
+                print("failed slopepiin")
+            self.slopepoints = []
+
+            try:
+                list = self.can.slope_points()
+            except Exception:
+                print("error while loading slope list")
+                list = []
+
+            for p in list:
+                point = QtWidgets.QGraphicsItemGroup()
+                point.setZValue(90)
+                circle = QtWidgets.QGraphicsEllipseItem(point)
+                circle.setRect(-5, -5, 10, 10)
+
+                circle.setBrush(QtGui.QBrush(QtCore.Qt.blue))
+                circle.setFlag(QtWidgets.QGraphicsItem.ItemIgnoresTransformations, True)
+                point.setX(p[0])
+                point.setY(p[1])
+                self.scene.addItem(point)
+                self.slopepoints.append(point)
+
+            try:
+                tags = self.can.tags()
+            except Exception:
+                tags = [None for i in range(15)]
+                print("error while loading tags list")
+
+            try:
+                pos = (self.can.get_position(0), self.can.get_position(1))
+            except Exception:
+                pos = (-1, -2)
+                print("error while loading tpositiont")
+
+            try:
+
+                for i in range(35):
+                    if tags[i] != None:
+                        tag = QtWidgets.QGraphicsItemGroup()
+                        #tag.setTransform(tag.transform().rotate(tags[i][0]))
+                        tag.setZValue(90)
+                        rect = QtWidgets.QGraphicsRectItem(tag)
+                        rect.setRect(-0.1, -0.1, 0.2, 3 * tags[i][1])
+                        tag.setScale(0.3)
+                        tag.setRotation(-tags[i][0]*180/3.1415)
+                        print(tags[i][0])
+                        rect.setBrush(QtGui.QBrush(QtCore.Qt.green))
+                        tag.setX(pos[0])
+                        tag.setY(pos[1])
+                        self.scene.addItem(tag)
+                        self.tags.append(tag)
+
+                        io = QtWidgets.QGraphicsTextItem()
+                        io.setTransform(io.transform().scale(0.3, -0.3))
+                        io.setPos(pos[0] + tags[i][1], pos[1])
+                        io.setPlainText(str(i))
+
+                        self.scene.addItem(io)
+                        self.tags.append(io)
+            except Exception:
+                pass
+
+
             for direction, combo in self.combos.items():
                 if combo.currentText() == "None":
                     return
                 device_id = combo.currentIndex() - 1
                 # print(self.pools[device_id][0])
-                if direction == "x":
-                    self.cursor.setX(self.pools[device_id][1]())
-                else:
-                    self.cursor.setY(self.pools[device_id][1]())
+                try:
+                    if direction == "x":
+                        self.cursor.setX(self.pools[device_id][1]())
+                    else:
+                        self.cursor.setY(self.pools[device_id][1]())
+                except Exception:
+                    pass
 
 
 if __name__ == '__main__':
