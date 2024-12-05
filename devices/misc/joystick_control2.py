@@ -7,6 +7,10 @@ import jsonpickle
 from ..misc.xbox import XBoxPad
 import time
 
+class NoRequiredDevicesError(Exception):
+    """Error raised if no devices required for given feature is found."""
+    pass
+
 dead_zone = 0.15
 
 
@@ -92,7 +96,6 @@ class JoystickControlWidget(QtWidgets.QWidget):
         except Exception as e:
             print(e)
         if self.xbox == None:
-            from src.measurement_tab import NoRequiredDevicesError
             raise NoRequiredDevicesError("No XBoxPad 2 found")
 
         self.timer = QtCore.QTimer()
